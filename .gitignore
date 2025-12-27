@@ -1,0 +1,22 @@
+# IDE
+.idea/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build outputs (per project)
+vscode-extension/out/
+vscode-extension/node_modules/
+idea-plugin/build/
+idea-plugin/.gradle/
+
+# Top level build output
+out/
+*.vsix
+*.zip
+.claude/

@@ -1,0 +1,23 @@
+<svg width="128" height="128" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="128" height="128" rx="24" fill="#0B0F14"/>
+
+  <!-- Quota Bar -->
+  <rect x="20" y="36" width="28" height="12" rx="6" fill="#4CAF50"/>
+  <rect x="50" y="36" width="28" height="12" rx="6" fill="#FFC107"/>
+  <rect x="80" y="36" width="28" height="12" rx="6" fill="#F44336"/>
+
+  <!-- Lightning -->
+  <circle cx="64" cy="68" r="14" fill="#0D1B2A"/>
+  <path d="M62 60 L56 72 H62 L58 82 L72 68 H66 L70 60 Z" fill="#00BCD4"/>
+
+  <!-- Text -->
+  <text x="64" y="104"
+        text-anchor="middle"
+        font-family="Inter, Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="14"
+        font-weight="600"
+        fill="#FFFFFF">
+    Quota Bar
+  </text>
+</svg>

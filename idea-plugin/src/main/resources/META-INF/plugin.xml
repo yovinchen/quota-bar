@@ -1,0 +1,67 @@
+<idea-plugin>
+    <id>com.yovinchen.quotabar</id>
+    <name>Quota Bar</name>
+    <vendor email="yovinchen@example.com" url="https://github.com/yovinchen">yovinchen</vendor>
+
+    <description><![CDATA[
+    Monitor API quota usage for various platforms (NewAPI, PackyAPI, PackyCode).
+    <br><br>
+    <b>功能:</b>
+    <ul>
+        <li>在状态栏实时监控配额</li>
+        <li>支持多平台 (NewAPI, PackyAPI, PackyCode)</li>
+        <li>可配置刷新间隔</li>
+        <li>链接测速功能</li>
+    </ul>
+    ]]></description>
+
+    <change-notes><![CDATA[
+    <b>1.0.0</b>
+    <ul>
+        <li>首个版本发布</li>
+        <li>支持 NewAPI, PackyAPI, PackyCode 平台</li>
+        <li>状态栏配额显示组件</li>
+    </ul>
+    ]]></change-notes>
+
+    <depends>com.intellij.modules.platform</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <statusBarWidgetFactory
+                id="ApiQuotaWatcher"
+                implementation="com.yovinchen.apiquotawatcher.widget.QuotaStatusBarWidgetFactory"
+                order="after Position"/>
+
+        <applicationService
+                serviceInterface="com.yovinchen.apiquotawatcher.service.QuotaService"
+                serviceImplementation="com.yovinchen.apiquotawatcher.service.QuotaServiceImpl"/>
+
+        <applicationConfigurable
+                parentId="tools"
+                instance="com.yovinchen.apiquotawatcher.settings.QuotaSettingsConfigurable"
+                id="com.yovinchen.apiquotawatcher.settings"
+                displayName="Quota Bar"/>
+
+        <applicationService
+                serviceInterface="com.yovinchen.apiquotawatcher.settings.QuotaSettings"
+                serviceImplementation="com.yovinchen.apiquotawatcher.settings.QuotaSettings"/>
+
+        <notificationGroup id="Quota Bar" displayType="BALLOON"/>
+    </extensions>
+
+    <actions>
+        <action id="ApiQuotaWatcher.Refresh"
+                class="com.yovinchen.apiquotawatcher.action.RefreshQuotaAction"
+                text="刷新 API 配额"
+                description="刷新 API 配额信息">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+
+        <action id="ApiQuotaWatcher.SpeedTest"
+                class="com.yovinchen.apiquotawatcher.action.SpeedTestAction"
+                text="API Speed Test"
+                description="Test API connection speed">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+    </actions>
+</idea-plugin>

@@ -1,0 +1,78 @@
+name: Build Quota Bar Plugins
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  # Job 1: Build VS Code Extension
+  build-vscode:
+    name: Build VS Code Extension
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./vscode-extension
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+
+      - name: Package Extension
+        run: vsce package -o quota-bar-vscode.vsix
+
+      - name: Upload VS Code Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quota-bar-vscode
+          path: vscode-extension/quota-bar-vscode.vsix
+
+  # Job 2: Build IntelliJ IDEA Plugin
+  build-idea:
+    name: Build IDEA Plugin
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./idea-plugin
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build Plugin
+        run: ./gradlew buildPlugin
+
+      - name: Upload IDEA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quota-bar-idea
+          path: idea-plugin/build/distributions/*.zip

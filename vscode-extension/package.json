@@ -1,0 +1,254 @@
+{
+    "name": "quota-bar",
+    "displayName": "Quota Bar",
+    "description": "在 VS Code 状态栏监控 API 配额",
+    "version": "1.0.0",
+    "publisher": "yovinchen",
+    "license": "MIT",
+    "icon": "icon.svg",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yovinchen/quota-bar"
+    },
+    "engines": {
+        "vscode": "^1.107.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "quota-bar.refresh",
+                "title": "刷新配额"
+            },
+            {
+                "command": "quota-bar.configure",
+                "title": "打开配置"
+            },
+            {
+                "command": "quota-bar.testConnection",
+                "title": "测试连接"
+            },
+            {
+                "command": "quota-bar.setToken",
+                "title": "设置 Access Token"
+            },
+            {
+                "command": "quota-bar.speedTest",
+                "title": "测速"
+            }
+        ],
+        "configuration": [
+            {
+                "title": "基础设置",
+                "order": 1,
+                "properties": {
+                    "quota-bar.enabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "order": 1,
+                        "description": "启用配额监控"
+                    },
+                    "quota-bar.speedTestEnabled": {
+                        "type": "boolean",
+                        "default": true,
+                        "order": 2,
+                        "description": "启用测速"
+                    },
+                    "quota-bar.platformType": {
+                        "type": "string",
+                        "enum": [
+                            "newapi",
+                            "packyapi",
+                            "packycode",
+                            "cubence"
+                        ],
+                        "enumDescriptions": [
+                            "NewAPI",
+                            "PackyAPI",
+                            "PackyCode",
+                            "Cubence"
+                        ],
+                        "default": "newapi",
+                        "order": 3,
+                        "description": "选择 API 平台"
+                    },
+                    "quota-bar.pollingInterval": {
+                        "type": "number",
+                        "default": 60000,
+                        "minimum": 10000,
+                        "order": 4,
+                        "description": "自动刷新间隔（毫秒）"
+                    },
+                    "quota-bar.displayStyle": {
+                        "type": "string",
+                        "enum": [
+                            "remaining",
+                            "percentage",
+                            "both"
+                        ],
+                        "default": "remaining",
+                        "order": 5,
+                        "enumDescriptions": [
+                            "剩余额度",
+                            "使用百分比",
+                            "已用/总额"
+                        ],
+                        "description": "状态栏显示样式"
+                    }
+                }
+            },
+            {
+                "title": "NewAPI",
+                "order": 2,
+                "properties": {
+                    "quota-bar.newapi.baseUrl": {
+                        "type": "string",
+                        "default": "",
+                        "order": 1,
+                        "description": "API 基础地址"
+                    },
+                    "quota-bar.newapi.accessToken": {
+                        "type": "string",
+                        "default": "",
+                        "order": 2,
+                        "description": "Access Token"
+                    },
+                    "quota-bar.newapi.userId": {
+                        "type": "string",
+                        "default": "",
+                        "order": 3,
+                        "description": "用户 ID"
+                    },
+                    "quota-bar.newapi.speedTestUrls": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "default": [],
+                        "order": 4,
+                        "description": "测速地址列表"
+                    }
+                }
+            },
+            {
+                "title": "PackyAPI",
+                "order": 3,
+                "properties": {
+                    "quota-bar.packyapi.baseUrl": {
+                        "type": "string",
+                        "default": "https://www.packyapi.com",
+                        "order": 1,
+                        "description": "API 基础地址"
+                    },
+                    "quota-bar.packyapi.accessToken": {
+                        "type": "string",
+                        "default": "",
+                        "order": 2,
+                        "description": "Access Token"
+                    },
+                    "quota-bar.packyapi.userId": {
+                        "type": "string",
+                        "default": "",
+                        "order": 3,
+                        "description": "用户 ID"
+                    },
+                    "quota-bar.packyapi.speedTestUrls": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "default": [
+                            "https://www.packyapi.com",
+                            "https://api-slb.packyapi.com"
+                        ],
+                        "order": 4,
+                        "description": "测速地址列表"
+                    }
+                }
+            },
+            {
+                "title": "PackyCode",
+                "order": 4,
+                "properties": {
+                    "quota-bar.packycode.baseUrl": {
+                        "type": "string",
+                        "default": "https://codex.packycode.com",
+                        "order": 1,
+                        "description": "API 基础地址"
+                    },
+                    "quota-bar.packycode.accessToken": {
+                        "type": "string",
+                        "default": "",
+                        "order": 2,
+                        "description": "Access Token"
+                    },
+                    "quota-bar.packycode.speedTestUrls": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "default": [
+                            "https://codex.packycode.com",
+                            "https://codex-api.packycode.com",
+                            "https://codex-api-slb.packycode.com"
+                        ],
+                        "order": 3,
+                        "description": "测速地址列表"
+                    }
+                }
+            },
+            {
+                "title": "Cubence",
+                "order": 5,
+                "properties": {
+                    "quota-bar.cubence.baseUrl": {
+                        "type": "string",
+                        "default": "https://cubence.com",
+                        "order": 1,
+                        "description": "API 基础地址"
+                    },
+                    "quota-bar.cubence.accessToken": {
+                        "type": "string",
+                        "default": "",
+                        "order": 2,
+                        "description": "Access Token"
+                    },
+                    "quota-bar.cubence.speedTestUrls": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "default": [
+                            "https://api-cf.cubence.com",
+                            "https://api-bwg.cubence.com",
+                            "https://api-dmit.cubence.com",
+                            "https://api.cubence.com"
+                        ],
+                        "order": 3,
+                        "description": "测速地址列表"
+                    }
+                }
+            }
+        ]
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "lint": "eslint src --ext ts"
+    },
+    "devDependencies": {
+        "@types/node": "^18.x",
+        "@types/vscode": "^1.107.0",
+        "@typescript-eslint/eslint-plugin": "^6.0.0",
+        "@typescript-eslint/parser": "^6.0.0",
+        "eslint": "^8.0.0",
+        "typescript": "^5.0.0"
+    }
+}
