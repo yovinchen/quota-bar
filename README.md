@@ -13,7 +13,7 @@
 
 <p align="center">
   跨 IDE 的 API 配额监控插件<br>
-  实时显示 AI API 余额和测速，支持 VS Code 和 IntelliJ IDEA
+  实时显示 AI API 余额与延迟，支持 VS Code 和 IntelliJ IDEA
 </p>
 
 ---
