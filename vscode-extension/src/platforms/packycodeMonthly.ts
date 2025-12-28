@@ -98,9 +98,6 @@ export class PackyCodeMonthlyAdapter extends BasePlatformAdapter {
             const balanceUsd = parseNumber(response.balance_usd);
             const totalSpentUsd = parseNumber(response.total_spent_usd);
 
-            // 主要显示月度数据
-            const remaining = monthlyBudget - monthlySpent;
-
             // 构建扩展数据
             const extended: ExtendedQuotaData = {
                 // 用户信息
@@ -133,13 +130,16 @@ export class PackyCodeMonthlyAdapter extends BasePlatformAdapter {
             // 获取套餐显示名称
             const planName = this.getPlanDisplayName(response.plan_type);
 
+            // 主要显示今日预算数据
+            const remaining = dailyBudget - dailySpent;
+
             return {
                 success: true,
                 data: {
                     planName,
                     remaining,
-                    used: monthlySpent,
-                    total: monthlyBudget,
+                    used: dailySpent,
+                    total: dailyBudget,
                     extended,
                 },
             };

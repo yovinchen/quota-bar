@@ -5,7 +5,7 @@
  */
 
 import * as vscode from 'vscode';
-import { Config, PlatformCredentials, PlatformType, PlatformConfig } from './types';
+import { Config, PlatformCredentials, PlatformType, PlatformConfig, WidgetConfig } from './types';
 
 export class ConfigService {
     private static readonly CONFIG_SECTION = 'quota-bar';
@@ -22,7 +22,13 @@ export class ConfigService {
             speedTestEnabled: config.get('speedTestEnabled', true),
             platformType,
             pollingInterval: config.get('pollingInterval', 60000),
-            displayStyle: config.get('displayStyle', 'remaining') as Config['displayStyle'],
+            widgets: {
+                statusIcon: config.get('widgets.statusIcon', true),
+                percentage: config.get('widgets.percentage', true),
+                used: config.get('widgets.used', false),
+                total: config.get('widgets.total', false),
+                latency: config.get('widgets.latency', true),
+            },
             platform: this.getPlatformConfig(platformType),
         };
     }

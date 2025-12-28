@@ -65,15 +65,42 @@ export class StatusBarService {
     private refreshStatusBarText(): void {
         if (!this.currentSnapshot) return;
 
-        let text = `$(credit-card) ${this.formatText(this.currentSnapshot)}`;
+        const parts: string[] = [];
+        const snapshot = this.currentSnapshot;
+        const widgets = this.config.widgets;
+        const remainPct = snapshot.total > 0 ? (snapshot.remaining / snapshot.total) * 100 : 0;
+        const usedPct = 100 - remainPct;
 
-        // 查找最低延迟
-        const minLatency = this.getMinLatency();
-        if (minLatency !== undefined) {
-            text += `  $(pulse) ${minLatency}ms`;
+        // 状态图标
+        if (widgets.statusIcon) {
+            const icon = remainPct > 60 ? '🟢' : remainPct > 20 ? '🟡' : '🔴';
+            parts.push(icon);
         }
 
-        this.statusBarItem.text = text;
+        // 状态比例
+        if (widgets.percentage) {
+            parts.push(`${usedPct.toFixed(1)}%`);
+        }
+
+        // 已使用金额
+        if (widgets.used) {
+            parts.push(`$${snapshot.used.toFixed(2)}`);
+        }
+
+        // 总金额
+        if (widgets.total) {
+            parts.push(`$${snapshot.total.toFixed(2)}`);
+        }
+
+        // 测速延迟
+        if (widgets.latency) {
+            const minLatency = this.getMinLatency();
+            if (minLatency !== undefined) {
+                parts.push(`${minLatency}ms`);
+            }
+        }
+
+        this.statusBarItem.text = parts.length > 0 ? parts.join(' ') : '$(credit-card) --';
     }
 
     private getMinLatency(): number | undefined {
@@ -133,22 +160,6 @@ export class StatusBarService {
         this.statusBarItem.color = new vscode.ThemeColor('editorWarning.foreground');
         this.statusBarItem.tooltip = `${msg.configMissing}: ${missing.join(', ')}`;
         this.statusBarItem.command = 'quota-bar.configure';
-    }
-
-    /**
-     * 格式化状态栏文本
-     */
-    private formatText(snapshot: QuotaSnapshot): string {
-        const msg = i18n.get();
-        switch (this.config.displayStyle) {
-            case 'percentage':
-                const pct = snapshot.total > 0 ? (snapshot.used / snapshot.total) * 100 : 0;
-                return `${msg.used} ${pct.toFixed(1)}%`;
-            case 'both':
-                return `$${snapshot.used.toFixed(2)} / $${snapshot.total.toFixed(2)}`;
-            default:
-                return `${msg.remaining} $${snapshot.remaining.toFixed(2)}`;
-        }
     }
 
     /**

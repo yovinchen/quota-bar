@@ -16,7 +16,13 @@ class QuotaSettings : PersistentStateComponent<QuotaSettings.State> {
         var speedTestEnabled: Boolean = true,
         var platformType: String = "newapi",
         var pollingInterval: Long = 60000,
-        var displayStyle: String = "remaining",
+
+        // 小组件开关
+        var widgetStatusIcon: Boolean = true,
+        var widgetPercentage: Boolean = true,
+        var widgetUsed: Boolean = false,
+        var widgetTotal: Boolean = false,
+        var widgetLatency: Boolean = true,
 
         // NewAPI settings
         var newapiBaseUrl: String = "",

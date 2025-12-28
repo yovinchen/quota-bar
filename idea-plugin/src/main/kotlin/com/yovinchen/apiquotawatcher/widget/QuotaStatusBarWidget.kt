@@ -130,18 +130,47 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
         val info = quotaInfo ?: return "API: --"
 
-        val quotaText = QuotaServiceImpl.getInstance().getDisplayText(info)
-        val speedText = if (settings.speedTestEnabled && speedResults.isNotEmpty()) {
+        val parts = mutableListOf<String>()
+        val remainPct = if (info.total > 0) (info.remaining / info.total) * 100 else 0.0
+        val usedPct = 100 - remainPct
+
+        // 状态图标
+        if (settings.widgetStatusIcon) {
+            val icon = when {
+                remainPct > 60 -> "🟢"
+                remainPct > 20 -> "🟡"
+                else -> "🔴"
+            }
+            parts.add(icon)
+        }
+
+        // 状态比例
+        if (settings.widgetPercentage) {
+            parts.add("${String.format("%.1f", usedPct)}%")
+        }
+
+        // 已使用金额
+        if (settings.widgetUsed) {
+            parts.add("$${String.format("%.2f", info.used)}")
+        }
+
+        // 总金额
+        if (settings.widgetTotal) {
+            parts.add("$${String.format("%.2f", info.total)}")
+        }
+
+        // 测速延迟
+        if (settings.widgetLatency && speedResults.isNotEmpty()) {
             val minLatency = speedResults
                 .filter { it.status == SpeedTestStatus.SUCCESS }
                 .minByOrNull { it.latency ?: Long.MAX_VALUE }
                 ?.latency
-            if (minLatency != null) " | ${minLatency}ms" else ""
-        } else {
-            ""
+            if (minLatency != null) {
+                parts.add("${minLatency}ms")
+            }
         }
 
-        return "💳 $quotaText$speedText"
+        return if (parts.isNotEmpty()) parts.joinToString(" ") else "API: --"
     }
 
     override fun getTooltipText(): String {

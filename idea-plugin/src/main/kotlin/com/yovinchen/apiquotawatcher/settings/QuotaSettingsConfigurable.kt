@@ -13,7 +13,13 @@ class QuotaSettingsConfigurable : Configurable {
     private var speedTestEnabledCheckBox: JCheckBox? = null
     private var platformTypeComboBox: JComboBox<String>? = null
     private var pollingIntervalField: JTextField? = null
-    private var displayStyleComboBox: JComboBox<String>? = null
+
+    // 小组件开关
+    private var widgetStatusIconCheckBox: JCheckBox? = null
+    private var widgetPercentageCheckBox: JCheckBox? = null
+    private var widgetUsedCheckBox: JCheckBox? = null
+    private var widgetTotalCheckBox: JCheckBox? = null
+    private var widgetLatencyCheckBox: JCheckBox? = null
 
     // NewAPI fields
     private var newapiBaseUrlField: JTextField? = null
@@ -86,8 +92,23 @@ class QuotaSettingsConfigurable : Configurable {
         pollingIntervalField = JTextField(10)
         addField(mainPanel!!, "轮询间隔 (ms):", pollingIntervalField!!, gbc, row++)
 
-        displayStyleComboBox = JComboBox(arrayOf("remaining", "percentage", "both"))
-        addField(mainPanel!!, "显示样式:", displayStyleComboBox!!, gbc, row++)
+        // 小组件设置
+        addSectionHeader(mainPanel!!, "显示组件", gbc, row++)
+
+        widgetStatusIconCheckBox = JCheckBox("状态图标（绿/黄/红）")
+        addField(mainPanel!!, "", widgetStatusIconCheckBox!!, gbc, row++)
+
+        widgetPercentageCheckBox = JCheckBox("已用百分比")
+        addField(mainPanel!!, "", widgetPercentageCheckBox!!, gbc, row++)
+
+        widgetUsedCheckBox = JCheckBox("已使用金额")
+        addField(mainPanel!!, "", widgetUsedCheckBox!!, gbc, row++)
+
+        widgetTotalCheckBox = JCheckBox("总金额")
+        addField(mainPanel!!, "", widgetTotalCheckBox!!, gbc, row++)
+
+        widgetLatencyCheckBox = JCheckBox("测速延迟")
+        addField(mainPanel!!, "", widgetLatencyCheckBox!!, gbc, row++)
 
         val resetButton = JButton("恢复默认配置")
         resetButton.addActionListener { resetToDefaults() }
@@ -217,7 +238,11 @@ class QuotaSettingsConfigurable : Configurable {
                 speedTestEnabledCheckBox?.isSelected != settings.speedTestEnabled ||
                 platformTypeComboBox?.selectedItem != settings.platformType ||
                 pollingIntervalField?.text != settings.pollingInterval.toString() ||
-                displayStyleComboBox?.selectedItem != settings.displayStyle ||
+                widgetStatusIconCheckBox?.isSelected != settings.widgetStatusIcon ||
+                widgetPercentageCheckBox?.isSelected != settings.widgetPercentage ||
+                widgetUsedCheckBox?.isSelected != settings.widgetUsed ||
+                widgetTotalCheckBox?.isSelected != settings.widgetTotal ||
+                widgetLatencyCheckBox?.isSelected != settings.widgetLatency ||
                 newapiBaseUrlField?.text != settings.newapiBaseUrl ||
                 String(newapiAccessTokenField?.password ?: charArrayOf()) != settings.newapiAccessToken ||
                 newapiUserIdField?.text != settings.newapiUserId ||
@@ -240,7 +265,11 @@ class QuotaSettingsConfigurable : Configurable {
         settings.speedTestEnabled = speedTestEnabledCheckBox?.isSelected ?: true
         settings.platformType = platformTypeComboBox?.selectedItem as? String ?: "newapi"
         settings.pollingInterval = pollingIntervalField?.text?.toLongOrNull() ?: 60000
-        settings.displayStyle = displayStyleComboBox?.selectedItem as? String ?: "remaining"
+        settings.widgetStatusIcon = widgetStatusIconCheckBox?.isSelected ?: true
+        settings.widgetPercentage = widgetPercentageCheckBox?.isSelected ?: true
+        settings.widgetUsed = widgetUsedCheckBox?.isSelected ?: false
+        settings.widgetTotal = widgetTotalCheckBox?.isSelected ?: false
+        settings.widgetLatency = widgetLatencyCheckBox?.isSelected ?: true
 
         settings.newapiBaseUrl = newapiBaseUrlField?.text ?: ""
         settings.newapiAccessToken = String(newapiAccessTokenField?.password ?: charArrayOf())
@@ -276,7 +305,11 @@ class QuotaSettingsConfigurable : Configurable {
         speedTestEnabledCheckBox?.isSelected = settings.speedTestEnabled
         platformTypeComboBox?.selectedItem = settings.platformType
         pollingIntervalField?.text = settings.pollingInterval.toString()
-        displayStyleComboBox?.selectedItem = settings.displayStyle
+        widgetStatusIconCheckBox?.isSelected = settings.widgetStatusIcon
+        widgetPercentageCheckBox?.isSelected = settings.widgetPercentage
+        widgetUsedCheckBox?.isSelected = settings.widgetUsed
+        widgetTotalCheckBox?.isSelected = settings.widgetTotal
+        widgetLatencyCheckBox?.isSelected = settings.widgetLatency
 
         newapiBaseUrlField?.text = settings.newapiBaseUrl
         newapiAccessTokenField?.text = settings.newapiAccessToken
@@ -308,7 +341,11 @@ class QuotaSettingsConfigurable : Configurable {
         speedTestEnabledCheckBox?.isSelected = true
         platformTypeComboBox?.selectedItem = "newapi"
         pollingIntervalField?.text = "60000"
-        displayStyleComboBox?.selectedItem = "remaining"
+        widgetStatusIconCheckBox?.isSelected = true
+        widgetPercentageCheckBox?.isSelected = true
+        widgetUsedCheckBox?.isSelected = false
+        widgetTotalCheckBox?.isSelected = false
+        widgetLatencyCheckBox?.isSelected = true
 
         newapiBaseUrlField?.text = ""
         newapiAccessTokenField?.text = ""

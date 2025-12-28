@@ -172,6 +172,10 @@ clean() {
         rm -rf "$IDEA_DIR/build"
         print_info "已清理: $IDEA_DIR/build"
     fi
+    if [ -d "$IDEA_DIR/bin" ]; then
+        rm -rf "$IDEA_DIR/bin"
+        print_info "已清理: $IDEA_DIR/bin"
+    fi
     
     # 清理输出目录
     if [ -d "$OUT_DIR" ]; then

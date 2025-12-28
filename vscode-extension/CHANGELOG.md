@@ -32,7 +32,11 @@
 - `speedTestEnabled` - 启用速度测试
 - `platformType` - 平台类型 (newapi / packycode)
 - `pollingInterval` - 轮询间隔
-- `displayStyle` - 显示样式
+- `widgets.statusIcon` - 状态图标（绿/黄/红）
+- `widgets.percentage` - 已用百分比
+- `widgets.used` - 已使用金额
+- `widgets.total` - 总金额
+- `widgets.latency` - 测速延迟
 
 ##### NewAPI 平台
 

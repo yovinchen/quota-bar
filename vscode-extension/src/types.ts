@@ -111,6 +111,17 @@ export interface PlatformConfig {
 }
 
 /**
+ * 小组件配置
+ */
+export interface WidgetConfig {
+    statusIcon: boolean;   // 状态图标
+    percentage: boolean;   // 状态比例
+    used: boolean;         // 已使用金额
+    total: boolean;        // 总金额
+    latency: boolean;      // 测速延迟
+}
+
+/**
  * 用户配置
  */
 export interface Config {
@@ -118,8 +129,7 @@ export interface Config {
     speedTestEnabled: boolean;
     platformType: PlatformType;
     pollingInterval: number;
-    displayStyle: 'remaining' | 'percentage' | 'both';
-    // 当前平台的配置
+    widgets: WidgetConfig;
     // 当前平台的配置
     platform: PlatformConfig;
 }

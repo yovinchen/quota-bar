@@ -307,14 +307,7 @@ class QuotaServiceImpl : QuotaService {
 
 
     override fun getDisplayText(info: QuotaInfo): String {
-        val settings = QuotaSettings.getInstance().state
-
-        return when (settings.displayStyle) {
-            "remaining" -> String.format("$%.2f", info.remaining)
-            "percentage" -> String.format("%.1f%%", info.percentage)
-            "both" -> String.format("$%.2f / $%.2f", info.used, info.total)
-            else -> String.format("$%.2f", info.remaining)
-        }
+        return String.format("$%.2f", info.remaining)
     }
 
     override fun testSpeed(): Long? {
