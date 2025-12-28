@@ -14,7 +14,7 @@ IntelliJ IDEA 状态栏 API 配额监控插件。
 ./gradlew buildPlugin
 ```
 
-构建产物在 `build/distributions/` 目录。
+构建产物：`build/distributions/quota-bar-1.0.0.zip`
 
 ## 安装
 

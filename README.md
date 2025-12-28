@@ -105,7 +105,7 @@ npm run compile
 npx vsce package
 ```
 
-输出：`quota-bar-*.vsix`
+输出：`quota-bar-1.0.0.vsix`
 
 ### IDEA 插件
 
@@ -114,7 +114,7 @@ cd idea-plugin
 ./gradlew buildPlugin
 ```
 
-输出：`build/distributions/*.zip`
+输出：`build/distributions/quota-bar-1.0.0.zip`
 
 ## 项目结构
 
