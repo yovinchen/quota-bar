@@ -11,7 +11,6 @@ import { BasePlatformAdapter } from './basePlatform';
 interface NewApiResponse {
     success: boolean;
     data?: {
-        group: string;
         quota: number;
         used_quota: number;
     };
@@ -47,7 +46,7 @@ export class NewApiAdapter extends BasePlatformAdapter {
                 return { success: false, error: response.message || '查询失败' };
             }
 
-            const { group, quota, used_quota } = response.data;
+            const { quota, used_quota } = response.data;
             // NewAPI 配额单位为 1/500000 USD
             const remaining = quota / 500000;
             const used = used_quota / 500000;
@@ -56,7 +55,7 @@ export class NewApiAdapter extends BasePlatformAdapter {
             return {
                 success: true,
                 data: {
-                    planName: group || '默认套餐',
+                    planName: '',
                     remaining,
                     used,
                     total,

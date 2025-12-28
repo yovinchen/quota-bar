@@ -193,24 +193,24 @@ show_help() {
     echo "用法: $0 [命令]"
     echo ""
     echo "命令:"
-    echo "  all       编译所有项目 (默认)"
+    echo "  package   编译并打包所有项目 (默认)"
+    echo "  all       仅编译所有项目"
     echo "  vscode    仅编译 VS Code 扩展"
     echo "  idea      仅编译 IDEA 插件"
-    echo "  package   编译并打包所有项目"
     echo "  clean     清理构建产物"
     echo "  help      显示此帮助信息"
     echo ""
     echo "输出目录: $OUT_DIR"
     echo ""
     echo "示例:"
-    echo "  $0              # 编译所有项目"
+    echo "  $0              # 编译并打包所有项目"
+    echo "  $0 all          # 仅编译所有项目"
     echo "  $0 vscode       # 仅编译 VS Code 扩展"
-    echo "  $0 package      # 编译并打包所有项目"
 }
 
 # 主函数
 main() {
-    local command="${1:-all}"
+    local command="${1:-package}"
     
     echo ""
     print_info "Quota Bar 构建脚本"
