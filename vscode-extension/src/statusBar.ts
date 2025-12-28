@@ -193,22 +193,15 @@ export class StatusBarService {
         const msg = i18n.get();
         const usedPct = snapshot.total > 0 ? (snapshot.used / snapshot.total) * 100 : 0;
         const remainPct = 100 - usedPct;
-        const bar = this.buildProgressBar(usedPct);
         const platformName = this.getPlatformDisplayName();
 
-        let content = `## 📊 ${platformName} ${msg.tooltipTitle}\n\n`;
-        content += `**${msg.progress}** ${usedPct.toFixed(1)}%\n\n`;
-        content += `\`${bar}\`\n\n`;
-        content += `---\n\n`;
-        content += `**💰 ${msg.quotaInfo}**\n\n`;
-        content += `| | | |\n`;
+        let content = `**${platformName}**\n\n`;
+        content += `| 项目 | 金额 | 比例 |\n`;
         content += `|:-----|-----:|-----:|\n`;
-        content += `| 🟢 ${msg.remaining} | $${snapshot.remaining.toFixed(2)} | ${remainPct.toFixed(1)}% |\n`;
-        content += `| 🔴 ${msg.used} | $${snapshot.used.toFixed(2)} | ${usedPct.toFixed(1)}% |\n`;
-        content += `| ⚪ ${msg.total} | $${snapshot.total.toFixed(2)} | 100% |\n`;
-        content += `| 📦 ${msg.plan} | ${snapshot.planName} | - |\n`;
+        content += `| 剩余 | $${snapshot.remaining.toFixed(2)} | ${remainPct.toFixed(1)}% |\n`;
+        content += `| 已用 | $${snapshot.used.toFixed(2)} | ${usedPct.toFixed(1)}% |\n`;
+        content += `| 总额 | $${snapshot.total.toFixed(2)} | - |\n`;
 
-        // 测速结果
         content += this.buildSpeedTestSection();
 
         const tooltip = new vscode.MarkdownString(content);
@@ -220,34 +213,22 @@ export class StatusBarService {
      * 构建 Cubence Tooltip
      */
     private buildCubenceTooltip(snapshot: QuotaSnapshot, ext: ExtendedQuotaData): vscode.MarkdownString {
-        const msg = i18n.get();
-        let content = `## 📊 Cubence ${msg.tooltipTitle}\n\n`;
+        let content = `**Cubence**\n\n`;
 
-        // 账户余额
         if (ext.balanceUsd !== undefined) {
-            content += `**💰 账户余额**\n\n`;
-            content += `| | |\n`;
-            content += `|:-----|-----:|\n`;
-            content += `| 💵 余额 | $${ext.balanceUsd.toFixed(2)} |\n`;
-            content += `\n---\n\n`;
+            content += `余额: $${ext.balanceUsd.toFixed(2)}\n\n`;
         }
 
-        // API Key 配额
         if (ext.apiKeyQuota) {
-            content += this.buildPeriodSection('🔑 API Key 配额', ext.apiKeyQuota);
+            content += this.buildPeriodSection('API Key 配额', ext.apiKeyQuota);
         }
-
-        // 5小时限制
         if (ext.fiveHour) {
-            content += this.buildPeriodSection('⏱️ 5小时限制窗口', ext.fiveHour);
+            content += this.buildPeriodSection('5小时窗口', ext.fiveHour);
         }
-
-        // 周限制
         if (ext.weekly) {
-            content += this.buildPeriodSection('📅 本周限制', ext.weekly);
+            content += this.buildPeriodSection('本周限制', ext.weekly);
         }
 
-        // 测速结果
         content += this.buildSpeedTestSection();
 
         const tooltip = new vscode.MarkdownString(content);
@@ -259,66 +240,34 @@ export class StatusBarService {
      * 构建扩展 Tooltip（PackyCode 包月）
      */
     private buildExtendedTooltip(snapshot: QuotaSnapshot, ext: ExtendedQuotaData): vscode.MarkdownString {
-        const msg = i18n.get();
+        let content = `**PackyCode**\n\n`;
 
-        let content = `## 📊 PackyCode 包月 ${msg.tooltipTitle}\n\n`;
-
-        // 用户和套餐信息
-        content += `**👤 账户信息**\n\n`;
-        content += `| | |\n`;
+        // 账户信息
+        content += `| 项目 | 值 |\n`;
         content += `|:-----|:-----|\n`;
         if (ext.username) {
-            content += `| 用户名 | ${ext.username} |\n`;
+            content += `| 用户 | ${ext.username} |\n`;
         }
         content += `| 套餐 | ${snapshot.planName} |\n`;
         if (ext.planExpiresAt) {
-            const expiresStr = this.formatDate(ext.planExpiresAt);
             const daysLeft = this.getDaysUntil(ext.planExpiresAt);
-            content += `| 到期时间 | ${expiresStr} (${daysLeft}天) |\n`;
+            content += `| 到期 | ${daysLeft}天后 |\n`;
         }
         if (ext.balanceUsd !== undefined) {
-            content += `| 账户余额 | $${ext.balanceUsd.toFixed(2)} |\n`;
-        }
-        if (ext.totalSpentUsd !== undefined) {
-            content += `| 累计消费 | $${ext.totalSpentUsd.toFixed(2)} |\n`;
+            content += `| 余额 | $${ext.balanceUsd.toFixed(2)} |\n`;
         }
 
-        content += `\n---\n\n`;
-
-        // 月度预算
+        // 预算信息
         if (ext.monthly) {
-            content += this.buildPeriodSection('📅 本月预算', ext.monthly);
+            content += `\n` + this.buildPeriodSection('本月', ext.monthly);
         }
-
-        // 周预算
         if (ext.weekly) {
-            let weekLabel = '📆 本周预算';
-            if (ext.weeklyWindowStart && ext.weeklyWindowEnd) {
-                const start = this.formatShortDate(ext.weeklyWindowStart);
-                const end = this.formatShortDate(ext.weeklyWindowEnd);
-                weekLabel = `📆 本周预算 (${start} - ${end})`;
-            }
-            content += this.buildPeriodSection(weekLabel, ext.weekly);
+            content += this.buildPeriodSection('本周', ext.weekly);
         }
-
-        // 日预算
         if (ext.daily) {
-            content += this.buildPeriodSection('🌅 今日预算', ext.daily);
+            content += this.buildPeriodSection('今日', ext.daily);
         }
 
-        // 配额信息（如果有）
-        if (ext.totalQuota && ext.totalQuota > 0) {
-            content += `\n---\n\n`;
-            content += `**🎫 配额信息**\n\n`;
-            content += `| | | |\n`;
-            content += `|:-----|-----:|-----:|\n`;
-            const quotaUsedPct = ext.totalQuota > 0 ? ((ext.usedQuota || 0) / ext.totalQuota) * 100 : 0;
-            content += `| 已用配额 | ${ext.usedQuota?.toLocaleString() || 0} | ${quotaUsedPct.toFixed(1)}% |\n`;
-            content += `| 剩余配额 | ${ext.remainingQuota?.toLocaleString() || 0} | ${(100 - quotaUsedPct).toFixed(1)}% |\n`;
-            content += `| 总配额 | ${ext.totalQuota.toLocaleString()} | 100% |\n`;
-        }
-
-        // 测速结果
         content += this.buildSpeedTestSection();
 
         const tooltip = new vscode.MarkdownString(content);
@@ -330,17 +279,14 @@ export class StatusBarService {
      * 构建周期预算段落
      */
     private buildPeriodSection(title: string, period: BudgetPeriod): string {
-        const bar = this.buildProgressBar(period.percentage);
-        const remaining = period.remaining;
         const remainPct = 100 - period.percentage;
 
-        let content = `**${title}**\n\n`;
-        content += `\`${bar}\` ${period.percentage.toFixed(1)}%\n\n`;
-        content += `| | | |\n`;
-        content += `|:-----|-----:|-----:|\n`;
-        content += `| 🟢 剩余 | $${remaining.toFixed(2)} | ${remainPct.toFixed(1)}% |\n`;
-        content += `| 🔴 已用 | $${period.spent.toFixed(2)} | ${period.percentage.toFixed(1)}% |\n`;
-        content += `| ⚪ 预算 | $${period.budget.toFixed(2)} | 100% |\n`;
+        let content = `**${title}** (已用 ${period.percentage.toFixed(1)}%)\n\n`;
+        content += `| 项目 | 金额 |\n`;
+        content += `|:-----|-----:|\n`;
+        content += `| 剩余 | $${period.remaining.toFixed(2)} |\n`;
+        content += `| 已用 | $${period.spent.toFixed(2)} |\n`;
+        content += `| 预算 | $${period.budget.toFixed(2)} |\n`;
         content += `\n`;
 
         return content;
@@ -354,17 +300,14 @@ export class StatusBarService {
             return '';
         }
 
-        const msg = i18n.get();
-        let content = `\n---\n\n`;
-        content += `**🚀 ${msg.speedTest}**\n\n`;
-        content += `| | | |\n`;
-        content += `|:-----|-----:|:-----|\n`;
+        let content = `\n---\n\n**测速**\n\n`;
+        content += `| 节点 | 延迟 |\n`;
+        content += `|:-----|-----:|\n`;
 
         for (const r of this.speedTestResults) {
             const host = this.shortenUrl(r.url);
             const latency = r.status === 'success' ? `${r.latency}ms` : '-';
-            const icon = r.status === 'success' ? '✅' : r.status === 'pending' ? '⏳' : '❌';
-            content += `| ${host} | ${latency} | ${icon} |\n`;
+            content += `| ${host} | ${latency} |\n`;
         }
 
         return content;
@@ -409,14 +352,6 @@ export class StatusBarService {
         } catch {
             return url.length > 20 ? url.slice(0, 17) + '...' : url;
         }
-    }
-
-    /**
-     * 生成进度条
-     */
-    private buildProgressBar(percentage: number): string {
-        const filled = Math.round(percentage / 5);
-        return '█'.repeat(Math.min(filled, 20)) + '░'.repeat(Math.max(20 - filled, 0));
     }
 
     /**
