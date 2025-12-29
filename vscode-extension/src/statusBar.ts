@@ -192,15 +192,12 @@ export class StatusBarService {
     private buildBasicTooltip(snapshot: QuotaSnapshot): vscode.MarkdownString {
         const msg = i18n.get();
         const usedPct = snapshot.total > 0 ? (snapshot.used / snapshot.total) * 100 : 0;
-        const remainPct = 100 - usedPct;
         const platformName = this.getPlatformDisplayName();
 
         let content = `**${platformName}**\n\n`;
-        content += `| 项目 | 金额 | 比例 |\n`;
-        content += `|:-----|-----:|-----:|\n`;
-        content += `| 剩余 | $${snapshot.remaining.toFixed(2)} | ${remainPct.toFixed(1)}% |\n`;
-        content += `| 已用 | $${snapshot.used.toFixed(2)} | ${usedPct.toFixed(1)}% |\n`;
-        content += `| 总额 | $${snapshot.total.toFixed(2)} | - |\n`;
+        content += `| 周期 | 已用 | 预算 | 进度 |\n`;
+        content += `|:-----|-----:|-----:|:-----|\n`;
+        content += `| 总额度 | $${snapshot.used.toFixed(2)} | $${snapshot.total.toFixed(2)} | ${this.buildProgressBar(usedPct)} |\n`;
 
         content += this.buildSpeedTestSection();
 
@@ -216,17 +213,24 @@ export class StatusBarService {
         let content = `**Cubence**\n\n`;
 
         if (ext.balanceUsd !== undefined) {
-            content += `余额: $${ext.balanceUsd.toFixed(2)}\n\n`;
+            content += `| 项目 | 金额 |\n`;
+            content += `|:-----|-----:|\n`;
+            content += `| 余额 | $${ext.balanceUsd.toFixed(2)} |\n\n`;
         }
 
-        if (ext.apiKeyQuota) {
-            content += this.buildPeriodSection('API Key 配额', ext.apiKeyQuota);
-        }
-        if (ext.fiveHour) {
-            content += this.buildPeriodSection('5小时窗口', ext.fiveHour);
-        }
-        if (ext.weekly) {
-            content += this.buildPeriodSection('本周限制', ext.weekly);
+        // 额度使用表格
+        const quotaRows: { label: string; period: BudgetPeriod }[] = [];
+        if (ext.apiKeyQuota) quotaRows.push({ label: 'API Key', period: ext.apiKeyQuota });
+        if (ext.fiveHour) quotaRows.push({ label: '5小时', period: ext.fiveHour });
+        if (ext.weekly) quotaRows.push({ label: '本周', period: ext.weekly });
+
+        if (quotaRows.length > 0) {
+            content += `**额度使用**\n\n`;
+            content += `| 周期 | 已用 | 预算 | 进度 |\n`;
+            content += `|:-----|-----:|-----:|:-----|\n`;
+            for (const row of quotaRows) {
+                content += `| ${row.label} | $${row.period.spent.toFixed(2)} | $${row.period.budget.toFixed(2)} | ${this.buildProgressBar(row.period.percentage)} |\n`;
+            }
         }
 
         content += this.buildSpeedTestSection();
@@ -257,15 +261,19 @@ export class StatusBarService {
             content += `| 余额 | $${ext.balanceUsd.toFixed(2)} |\n`;
         }
 
-        // 预算信息
-        if (ext.monthly) {
-            content += `\n` + this.buildPeriodSection('本月', ext.monthly);
-        }
-        if (ext.weekly) {
-            content += this.buildPeriodSection('本周', ext.weekly);
-        }
-        if (ext.daily) {
-            content += this.buildPeriodSection('今日', ext.daily);
+        // 额度使用表格
+        const quotaRows: { label: string; period: BudgetPeriod }[] = [];
+        if (ext.monthly) quotaRows.push({ label: '本月', period: ext.monthly });
+        if (ext.weekly) quotaRows.push({ label: '本周', period: ext.weekly });
+        if (ext.daily) quotaRows.push({ label: '今日', period: ext.daily });
+
+        if (quotaRows.length > 0) {
+            content += `\n**额度使用**\n\n`;
+            content += `| 周期 | 已用 | 预算 | 进度 |\n`;
+            content += `|:-----|-----:|-----:|:-----|\n`;
+            for (const row of quotaRows) {
+                content += `| ${row.label} | $${row.period.spent.toFixed(2)} | $${row.period.budget.toFixed(2)} | ${this.buildProgressBar(row.period.percentage)} |\n`;
+            }
         }
 
         content += this.buildSpeedTestSection();
@@ -276,20 +284,14 @@ export class StatusBarService {
     }
 
     /**
-     * 构建周期预算段落
+     * 构建进度条（使用 Unicode 字符）
      */
-    private buildPeriodSection(title: string, period: BudgetPeriod): string {
-        const remainPct = 100 - period.percentage;
-
-        let content = `**${title}** (已用 ${period.percentage.toFixed(1)}%)\n\n`;
-        content += `| 项目 | 金额 |\n`;
-        content += `|:-----|-----:|\n`;
-        content += `| 剩余 | $${period.remaining.toFixed(2)} |\n`;
-        content += `| 已用 | $${period.spent.toFixed(2)} |\n`;
-        content += `| 预算 | $${period.budget.toFixed(2)} |\n`;
-        content += `\n`;
-
-        return content;
+    private buildProgressBar(percentage: number): string {
+        const pct = Math.min(100, Math.max(0, percentage));
+        const filled = Math.round(pct / 10);
+        const empty = 10 - filled;
+        const bar = '█'.repeat(filled) + '░'.repeat(empty);
+        return `${bar} ${pct.toFixed(1)}%`;
     }
 
     /**

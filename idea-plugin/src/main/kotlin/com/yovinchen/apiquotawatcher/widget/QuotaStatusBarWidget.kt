@@ -26,6 +26,8 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     private var lastError: String? = null
     private var lastUpdateTime: Long = 0
     private var pendingUiUpdate = false
+    private var lastDisplayText: String = ""
+    private var lastTooltipContent: String = ""
 
     companion object {
         const val ID = "ApiQuotaWatcher"
@@ -68,6 +70,11 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         timer = null
     }
 
+    private var lastRenderedQuotaInfo: QuotaInfo? = null
+    private var lastRenderedSpeedResults: List<SpeedTestResult> = emptyList()
+    // 用于显示的测速结果（只在状态变化时更新，避免延迟微小波动导致 tooltip 变化）
+    private var displaySpeedResults: List<SpeedTestResult> = emptyList()
+
     fun refreshQuota() {
         if (isLoading) {
             LOG.debug("Already loading, skipping refresh")
@@ -82,31 +89,89 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             try {
                 val service = QuotaServiceImpl.getInstance()
                 val newQuotaInfo = service.fetchQuota()
+                var newSpeedResults: List<SpeedTestResult> = emptyList()
                 
-                if (newQuotaInfo != null) {
-                    quotaInfo = newQuotaInfo
-                    lastUpdateTime = System.currentTimeMillis()
-                    LOG.info("Quota fetched: used=${newQuotaInfo.used}, total=${newQuotaInfo.total}, remaining=${newQuotaInfo.remaining}")
-                } else {
+                if (newQuotaInfo == null) {
                     lastError = "无法获取配额信息，请检查配置"
-                    LOG.warn("Failed to fetch quota: returned null")
                 }
 
                 val settings = QuotaSettings.getInstance().state
                 if (settings.speedTestEnabled) {
-                    speedResults = service.testSpeedAll()
-                    LOG.info("Speed test completed: ${speedResults.size} results")
+                    // 关键修复：强制按 URL 排序，确保列表顺序一致，防止因顺序不同导致的 UI 变化
+                    newSpeedResults = service.testSpeedAll().sortedBy { it.url }
                 }
+                
+                // 检查数据是否发生了显著变化
+                // 注意：这里传入 newQuotaInfo，不要直接使用成员变量，因为成员变量还没更新
+                val shouldUpdate = isSignificantChange(newQuotaInfo, newSpeedResults)
+
+                if (shouldUpdate) {
+                     // 只有数据显著变化时，才更新成员变量和渲染缓存
+                     if (newQuotaInfo != null) {
+                         quotaInfo = newQuotaInfo
+                         lastRenderedQuotaInfo = newQuotaInfo
+                         lastUpdateTime = System.currentTimeMillis()
+                         LOG.info("Quota updated: used=${newQuotaInfo.used}")
+                     }
+
+                     speedResults = newSpeedResults
+                     lastRenderedSpeedResults = newSpeedResults
+                     // 只在状态变化时更新显示用的测速结果
+                     displaySpeedResults = newSpeedResults
+
+                     // 成功获取数据，清除错误状态
+                     lastError = null
+                }
+
+                ApplicationManager.getApplication().invokeLater {
+                    // 安全更新：只有当确实需要更新时才调用
+                    if (shouldUpdate) {
+                         requestStatusBarUpdate()
+                    }
+                }
+
             } catch (e: Exception) {
-                lastError = e.message ?: "未知错误"
-                LOG.error("Error fetching quota", e)
+                LOG.warn("Error fetching quota (transient)", e)
+                // 关键修复：如果已有缓存数据，忽略临时错误，防止 UI 闪烁成错误状态
+                // 只有当完全没有数据时，才显示错误
+                if (quotaInfo == null) {
+                    lastError = e.message ?: "未知错误"
+                    ApplicationManager.getApplication().invokeLater {
+                        requestStatusBarUpdate()
+                    }
+                }
             } finally {
                 isLoading = false
-                ApplicationManager.getApplication().invokeLater {
-                    requestStatusBarUpdate()
-                }
             }
         }
+    }
+
+    private fun isSignificantChange(newQuota: QuotaInfo?, newSpeed: List<SpeedTestResult>): Boolean {
+        // 1. 配额信息变化检测（使用容差比较，避免浮点精度问题）
+        if (newQuota == null && lastRenderedQuotaInfo == null) {
+            // 都为 null，检查测速
+        } else if (newQuota == null || lastRenderedQuotaInfo == null) {
+            return true // 一个为 null，另一个不为 null
+        } else {
+            // 使用容差比较 Double 值（0.001 = $0.001 精度）
+            val tolerance = 0.001
+            if (Math.abs(newQuota.used - lastRenderedQuotaInfo!!.used) > tolerance) return true
+            if (Math.abs(newQuota.total - lastRenderedQuotaInfo!!.total) > tolerance) return true
+            if (Math.abs(newQuota.remaining - lastRenderedQuotaInfo!!.remaining) > tolerance) return true
+            if (Math.abs(newQuota.percentage - lastRenderedQuotaInfo!!.percentage) > 0.1) return true
+        }
+
+        // 2. 测速结果防抖（只检测状态变化，忽略延迟微小波动）
+        if (newSpeed.size != lastRenderedSpeedResults.size) return true
+
+        val oldMap = lastRenderedSpeedResults.associateBy { it.url }
+        for (item in newSpeed) {
+            val oldItem = oldMap[item.url] ?: return true
+            // 只检测状态变化（成功 <-> 失败）
+            if (oldItem.status != item.status) return true
+        }
+
+        return false
     }
 
     override fun getPresentation(): StatusBarWidget.WidgetPresentation = this
@@ -157,9 +222,9 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             parts.add("$${String.format("%.2f", info.total)}")
         }
 
-        // 测速延迟
-        if (settings.widgetLatency && speedResults.isNotEmpty()) {
-            val minLatency = speedResults
+        // 测速延迟（使用显示用的缓存结果）
+        if (settings.widgetLatency && displaySpeedResults.isNotEmpty()) {
+            val minLatency = displaySpeedResults
                 .filter { it.status == SpeedTestStatus.SUCCESS }
                 .minByOrNull { it.latency ?: Long.MAX_VALUE }
                 ?.latency
@@ -211,21 +276,13 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     private fun buildBasicTooltip(info: QuotaInfo): String {
         val settings = QuotaSettings.getInstance().state
         val speedSection = buildSpeedTestSection()
-        val remainPct = if (info.total > 0) (info.remaining / info.total) * 100 else 0.0
-        val usedPct = 100 - remainPct
+        val usedPct = if (info.total > 0) (info.used / info.total) * 100 else 0.0
 
         val content = StringBuilder()
         content.append(sectionTitle(getPlatformName(settings.platformType)))
-        content.append(
-            buildTable(
-                listOf("项目", "金额", "比例"),
-                listOf(
-                    listOf("剩余", formatCurrency(info.remaining), formatPercentage(remainPct)),
-                    listOf("已用", formatCurrency(info.used), formatPercentage(usedPct)),
-                    listOf("总额", formatCurrency(info.total), "-")
-                )
-            )
-        )
+        content.append(buildQuotaTable(listOf(
+            QuotaRow("总额度", info.used, info.total, usedPct)
+        )))
         if (speedSection.isNotEmpty()) {
             content.append(speedSection)
         }
@@ -233,18 +290,12 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         return wrapTooltip(content.toString())
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun buildExtendedTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
         val sb = StringBuilder()
         sb.append(sectionTitle("PackyCode"))
 
-        val badges = mutableListOf<String>()
-        ext.planType?.let { badges.add(getPlanDisplayName(it)) }
-        ext.planExpiresAt?.let { badges.add("到期 ${getDaysUntil(it)}天后") }
-        ext.balanceUsd?.let { badges.add("余额 ${formatCurrency(it)}") }
-        if (badges.isNotEmpty()) {
-            sb.append(buildBadges(badges))
-        }
-
+        // 账户信息表格
         val accountRows = mutableListOf<List<String>>()
         ext.username?.let { accountRows.add(listOf("用户", it)) }
         ext.planType?.let { accountRows.add(listOf("套餐", getPlanDisplayName(it))) }
@@ -257,9 +308,15 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             sb.append(buildTable(listOf("项目", "值"), accountRows))
         }
 
-        ext.monthly?.let { sb.append(buildBudgetSection("本月", it)) }
-        ext.weekly?.let { sb.append(buildBudgetSection("本周", it)) }
-        ext.daily?.let { sb.append(buildBudgetSection("今日", it)) }
+        // 额度使用表格
+        val quotaRows = mutableListOf<QuotaRow>()
+        ext.monthly?.let { quotaRows.add(QuotaRow("本月", it.spent, it.budget, it.percentage)) }
+        ext.weekly?.let { quotaRows.add(QuotaRow("本周", it.spent, it.budget, it.percentage)) }
+        ext.daily?.let { quotaRows.add(QuotaRow("今日", it.spent, it.budget, it.percentage)) }
+        if (quotaRows.isNotEmpty()) {
+            sb.append(sectionTitle("额度使用"))
+            sb.append(buildQuotaTable(quotaRows))
+        }
 
         val speedSection = buildSpeedTestSection()
         if (speedSection.isNotEmpty()) {
@@ -269,6 +326,7 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         return wrapTooltip(sb.toString())
     }
 
+    @Suppress("UNUSED_PARAMETER")
     private fun buildCubenceTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
         val sb = StringBuilder()
         sb.append(sectionTitle("Cubence"))
@@ -277,9 +335,15 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             sb.append(buildTable(listOf("项目", "金额"), listOf(listOf("余额", formatCurrency(it)))))
         }
 
-        ext.apiKeyQuota?.let { sb.append(buildBudgetSection("API Key 配额", it)) }
-        ext.fiveHour?.let { sb.append(buildBudgetSection("5小时窗口", it)) }
-        ext.weekly?.let { sb.append(buildBudgetSection("本周限制", it)) }
+        // 额度使用表格
+        val quotaRows = mutableListOf<QuotaRow>()
+        ext.apiKeyQuota?.let { quotaRows.add(QuotaRow("API Key", it.spent, it.budget, it.percentage)) }
+        ext.fiveHour?.let { quotaRows.add(QuotaRow("5小时", it.spent, it.budget, it.percentage)) }
+        ext.weekly?.let { quotaRows.add(QuotaRow("本周", it.spent, it.budget, it.percentage)) }
+        if (quotaRows.isNotEmpty()) {
+            sb.append(sectionTitle("额度使用"))
+            sb.append(buildQuotaTable(quotaRows))
+        }
 
         val speedSection = buildSpeedTestSection()
         if (speedSection.isNotEmpty()) {
@@ -290,11 +354,11 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     }
 
     private fun buildSpeedTestSection(): String {
-        if (speedResults.isEmpty()) {
+        if (displaySpeedResults.isEmpty()) {
             return ""
         }
 
-        val rows = speedResults.map { result ->
+        val rows = displaySpeedResults.map { result ->
             val host = shortenUrl(result.url)
             val latency = if (result.status == SpeedTestStatus.SUCCESS && result.latency != null) {
                 "${result.latency}ms"
@@ -308,26 +372,26 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     }
 
     private fun wrapTooltip(content: String): String {
-        return "<html><body style='padding: 8px; font-family: sans-serif;'>$content</body></html>"
+        return "<html><body style='padding:8px;'>$content</body></html>"
     }
 
     private fun sectionTitle(title: String): String {
-        return "<div style='font-weight:bold; margin:0 0 6px 0;'>$title</div>"
+        return "<p><b>$title</b></p>"
     }
 
     private fun paragraph(text: String): String {
-        return "<div style='margin:0 0 6px 0;'>$text</div>"
+        return "<p>$text</p>"
     }
 
     private fun buildTable(headers: List<String>, rows: List<List<String>>): String {
         val sb = StringBuilder()
-        sb.append("<table style='border-collapse:collapse; width:100%; margin:0 0 8px 0;'>")
+        sb.append("<table cellpadding='2' cellspacing='0'>")
 
         if (headers.isNotEmpty()) {
             sb.append("<tr>")
             headers.forEachIndexed { index, header ->
                 val align = if (index == 0) "left" else "right"
-                sb.append("<th style='padding:0 6px 4px 0; text-align:$align; color:#888; font-weight:normal;'>$header</th>")
+                sb.append("<td align='$align'><font color='#888888'>$header</font></td>")
             }
             sb.append("</tr>")
         }
@@ -336,7 +400,7 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             sb.append("<tr>")
             row.forEachIndexed { index, cell ->
                 val align = if (index == 0) "left" else "right"
-                sb.append("<td style='padding:2px 6px 2px 0; text-align:$align;'>$cell</td>")
+                sb.append("<td align='$align'>$cell</td>")
             }
             sb.append("</tr>")
         }
@@ -345,30 +409,59 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         return sb.toString()
     }
 
-    private fun buildBudgetSection(title: String, period: BudgetPeriod): String {
-        return sectionTitle("$title (已用 ${formatPercentage(period.percentage)})") + buildTable(
-            listOf("项目", "金额"),
-            listOf(
-                listOf("剩余", formatCurrency(period.remaining)),
-                listOf("已用", formatCurrency(period.spent)),
-                listOf("预算", formatCurrency(period.budget))
-            )
-        )
+    /**
+     * 额度行数据
+     */
+    private data class QuotaRow(
+        val label: String,
+        val used: Double,
+        val total: Double,
+        val percentage: Double
+    )
+
+    /**
+     * 构建带进度条的额度表格
+     */
+    private fun buildQuotaTable(rows: List<QuotaRow>): String {
+        val sb = StringBuilder()
+        sb.append("<table cellpadding='2' cellspacing='0'>")
+
+        // 表头
+        sb.append("<tr>")
+        sb.append("<td align='left'><font color='#888888'>周期</font></td>")
+        sb.append("<td align='right'><font color='#888888'>已用</font></td>")
+        sb.append("<td align='right'><font color='#888888'>预算</font></td>")
+        sb.append("<td align='left'><font color='#888888'>进度</font></td>")
+        sb.append("</tr>")
+
+        // 数据行
+        for (row in rows) {
+            sb.append("<tr>")
+            sb.append("<td align='left'>${row.label}</td>")
+            sb.append("<td align='right'>${formatCurrency(row.used)}</td>")
+            sb.append("<td align='right'>${formatCurrency(row.total)}</td>")
+            sb.append("<td align='left'>${buildProgressBar(row.percentage)}</td>")
+            sb.append("</tr>")
+        }
+
+        sb.append("</table>")
+        return sb.toString()
+    }
+
+    /**
+     * 构建进度条（使用 Unicode 字符，兼容 IDEA HTML 渲染）
+     */
+    private fun buildProgressBar(percentage: Double): String {
+        val pct = percentage.coerceIn(0.0, 100.0)
+        val filled = (pct / 10).toInt()
+        val empty = 10 - filled
+        val bar = "█".repeat(filled) + "░".repeat(empty)
+        return "$bar ${String.format("%.1f", pct)}%"
     }
 
     private fun formatCurrency(value: Double): String = "$${String.format("%.2f", value)}"
 
     private fun formatPercentage(value: Double): String = "${String.format("%.1f", value)}%"
-
-    private fun buildBadges(labels: List<String>): String {
-        val sb = StringBuilder()
-        sb.append("<div style='display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px 0;'>")
-        labels.forEach { label ->
-            sb.append("<span style='background:#f2f2f2; border-radius:12px; padding:4px 10px; font-size:12px;'>$label</span>")
-        }
-        sb.append("</div>")
-        return sb.toString()
-    }
 
     private fun shortenUrl(url: String): String {
         return try {
@@ -405,29 +498,61 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     }
 
     /**
-     * 避免悬浮提示被立即关闭：鼠标停留在状态栏时先延迟更新，鼠标离开后再刷新
+     * 避免悬浮提示闪烁：只有当显示内容真正变化时才更新 widget
+     * 鼠标停留在状态栏时延迟更新，鼠标离开后再刷新
      */
     private fun requestStatusBarUpdate() {
+        // 计算当前显示内容
+        val currentText = getText()
+        val currentTooltip = getTooltipText()
+
+        // 如果内容没有变化，不需要更新 UI
+        if (currentText == lastDisplayText && currentTooltip == lastTooltipContent) {
+            return
+        }
+
         val component = statusBar?.component ?: return
-        val mouseOverStatusBar = component.mousePosition != null
 
-        if (!mouseOverStatusBar) {
-            pendingUiUpdate = false
-            statusBar?.updateWidget(ID)
-            return
-        }
-
-        if (pendingUiUpdate) {
-            return
-        }
-        pendingUiUpdate = true
-
-        ApplicationManager.getApplication().executeOnPooledThread {
-            Thread.sleep(500)
-            ApplicationManager.getApplication().invokeLater {
-                requestStatusBarUpdate()
+        // 更健壮的鼠标悬停检测：使用绝对坐标判断
+        var isMouseOver = false
+        try {
+            val pointerInfo = java.awt.MouseInfo.getPointerInfo()
+            if (pointerInfo != null) {
+                val point = pointerInfo.location
+                javax.swing.SwingUtilities.convertPointFromScreen(point, component)
+                isMouseOver = component.contains(point)
             }
+        } catch (e: Exception) {
+            // 忽略异常，默认为未悬停
+            LOG.warn("Error checking mouse position", e)
         }
+
+        if (isMouseOver) {
+            // 鼠标悬停时，不进行更新，以免打断 Tooltip 显示
+            // 启动一个延时任务，稍后再试
+            if (!pendingUiUpdate) {
+                pendingUiUpdate = true
+                ApplicationManager.getApplication().executeOnPooledThread {
+                    try {
+                        Thread.sleep(1000)
+                    } catch (ignored: InterruptedException) {
+                    }
+                    
+                    ApplicationManager.getApplication().invokeLater {
+                        pendingUiUpdate = false
+                        // 重新检查是否可以更新
+                        requestStatusBarUpdate()
+                    }
+                }
+            }
+            return
+        }
+
+        // 鼠标未悬停，安全更新
+        lastDisplayText = currentText
+        lastTooltipContent = currentTooltip
+        pendingUiUpdate = false
+        statusBar?.updateWidget(ID)
     }
 
     override fun getAlignment(): Float = 0f

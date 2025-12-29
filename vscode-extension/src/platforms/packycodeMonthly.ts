@@ -59,6 +59,7 @@ export class PackyCodeMonthlyAdapter extends BasePlatformAdapter {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${credentials.accessToken}`,
+                        'Content-Type': 'application/json',
                     },
                 }
             );
