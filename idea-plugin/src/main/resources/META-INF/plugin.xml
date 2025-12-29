@@ -1,4 +1,6 @@
 <idea-plugin>
+    <idea-version since-build="253" until-build="253.*"/>
+    <version>1.0.0</version>
     <id>com.yovinchen.quotabar</id>
     <name>Quota Bar</name>
     <vendor email="yovinchen@example.com" url="https://github.com/yovinchen">yovinchen</vendor>
