@@ -9,6 +9,10 @@ import { Config, PlatformCredentials, PlatformType, PlatformConfig, WidgetConfig
 
 export class ConfigService {
     private static readonly CONFIG_SECTION = 'quota-bar';
+    private static readonly SECRET_PREFIX = 'quota-bar.token.';
+    private tokenCache: Partial<Record<PlatformType, string>> = {};
+
+    constructor(private readonly context: vscode.ExtensionContext) {}
 
     /**
      * 获取完整配置
@@ -38,9 +42,10 @@ export class ConfigService {
      */
     getPlatformConfig(platformType: PlatformType): PlatformConfig {
         const config = vscode.workspace.getConfiguration(ConfigService.CONFIG_SECTION);
+        const accessToken = this.tokenCache[platformType] ?? '';
         return {
             baseUrl: config.get(`${platformType}.baseUrl`, ''),
-            accessToken: config.get(`${platformType}.accessToken`, ''),
+            accessToken,
             userId: config.get(`${platformType}.userId`, ''),
             speedTestUrls: config.get(`${platformType}.speedTestUrls`, []) as string[],
         };
@@ -113,8 +118,8 @@ export class ConfigService {
      */
     async saveAccessToken(token: string): Promise<void> {
         const platformType = this.getPlatformType();
-        await vscode.workspace.getConfiguration(ConfigService.CONFIG_SECTION)
-            .update(`${platformType}.accessToken`, token, vscode.ConfigurationTarget.Global);
+        this.tokenCache[platformType] = token;
+        await this.context.secrets.store(`${ConfigService.SECRET_PREFIX}${platformType}`, token);
     }
 
     /**
@@ -134,6 +139,27 @@ export class ConfigService {
      * 初始化（保持接口兼容）
      */
     async initialize(): Promise<void> {
-        // 独立配置字段方案不需要特殊初始化
+        const config = vscode.workspace.getConfiguration(ConfigService.CONFIG_SECTION);
+        const platforms: PlatformType[] = ['newapi', 'packyapi', 'packycode', 'cubence'];
+
+        for (const platform of platforms) {
+            const secretKey = `${ConfigService.SECRET_PREFIX}${platform}`;
+            // 优先读取 Secret Storage
+            const secretToken = await this.context.secrets.get(secretKey);
+            if (secretToken) {
+                this.tokenCache[platform] = secretToken;
+                continue;
+            }
+
+            // 兼容旧配置（settings.json），迁移后写入 Secret Storage
+            const legacyToken = config.get<string>(`${platform}.accessToken`, '');
+            if (legacyToken) {
+                this.tokenCache[platform] = legacyToken;
+                await this.context.secrets.store(secretKey, legacyToken);
+                await config.update(`${platform}.accessToken`, '', vscode.ConfigurationTarget.Global);
+            } else {
+                this.tokenCache[platform] = '';
+            }
+        }
     }
 }

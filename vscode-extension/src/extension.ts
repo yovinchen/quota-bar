@@ -22,7 +22,7 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log('API Quota Watcher is now active');
 
     // 初始化服务
-    configService = new ConfigService();
+    configService = new ConfigService(context);
     speedTestService = new SpeedTestService();
 
     // 初始化配置存储

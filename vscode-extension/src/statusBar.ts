@@ -300,7 +300,7 @@ export class StatusBarService {
             return '';
         }
 
-        let content = `\n---\n\n**测速**\n\n`;
+        let content = `\n\n**测速**\n\n`;
         content += `| 节点 | 延迟 |\n`;
         content += `|:-----|-----:|\n`;
 
