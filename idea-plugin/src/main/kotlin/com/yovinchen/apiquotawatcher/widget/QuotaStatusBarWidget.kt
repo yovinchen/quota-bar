@@ -9,7 +9,6 @@ import com.intellij.util.Consumer
 import com.yovinchen.apiquotawatcher.service.*
 import com.yovinchen.apiquotawatcher.settings.QuotaSettings
 import java.awt.event.MouseEvent
-import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
@@ -18,9 +17,7 @@ import java.util.concurrent.TimeUnit
 class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, StatusBarWidget.TextPresentation {
 
     private val LOG = Logger.getInstance(QuotaStatusBarWidget::class.java)
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd")
-    private val shortDateFormat = SimpleDateFormat("MM-dd")
-    
+
     private var statusBar: StatusBar? = null
     private var quotaInfo: QuotaInfo? = null
     private var speedResults: List<SpeedTestResult> = emptyList()
@@ -28,6 +25,7 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     private var isLoading = false
     private var lastError: String? = null
     private var lastUpdateTime: Long = 0
+    private var pendingUiUpdate = false
 
     companion object {
         const val ID = "ApiQuotaWatcher"
@@ -105,7 +103,7 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             } finally {
                 isLoading = false
                 ApplicationManager.getApplication().invokeLater {
-                    statusBar?.updateWidget(ID)
+                    requestStatusBarUpdate()
                 }
             }
         }
@@ -177,35 +175,24 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         val settings = QuotaSettings.getInstance().state
 
         if (!settings.enabled) {
-            return "<html><body style='padding: 6px; font-family: sans-serif;'>API 配额监控已禁用</body></html>"
+            return wrapTooltip(sectionTitle("API 配额监控已禁用"))
         }
 
         if (lastError != null) {
-            return """
-                <html>
-                <body style='padding: 6px; font-family: sans-serif;'>
-                <b>❌ 获取配额失败</b><br>
-                <hr style='margin: 4px 0;'>
-                错误: $lastError<br>
-                <hr style='margin: 4px 0;'>
-                平台: ${getPlatformName(settings.platformType)}
-                </body>
-                </html>
-            """.trimIndent()
+            val content = StringBuilder()
+            content.append(sectionTitle("获取配额失败"))
+            content.append(paragraph("错误: $lastError"))
+            content.append(paragraph("平台: ${getPlatformName(settings.platformType)}"))
+            return wrapTooltip(content.toString())
         }
 
         val info = quotaInfo
         if (info == null) {
-            return """
-                <html>
-                <body style='padding: 6px; font-family: sans-serif;'>
-                <b>API 配额信息</b><br>
-                <hr style='margin: 4px 0;'>
-                状态: ${if (isLoading) "加载中..." else "未获取"}<br>
-                平台: ${getPlatformName(settings.platformType)}
-                </body>
-                </html>
-            """.trimIndent()
+            val content = StringBuilder()
+            content.append(sectionTitle("API 配额信息"))
+            content.append(paragraph("状态: ${if (isLoading) "加载中..." else "未获取"}"))
+            content.append(paragraph("平台: ${getPlatformName(settings.platformType)}"))
+            return wrapTooltip(content.toString())
         }
 
         // PackyCode 使用扩展信息
@@ -223,187 +210,83 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
     private fun buildBasicTooltip(info: QuotaInfo): String {
         val settings = QuotaSettings.getInstance().state
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
-
         val speedSection = buildSpeedTestSection()
+        val remainPct = if (info.total > 0) (info.remaining / info.total) * 100 else 0.0
+        val usedPct = 100 - remainPct
 
-        return """
-            <html>
-            <body style='padding: 6px; font-family: sans-serif;'>
-            <b>📊 ${getPlatformName(settings.platformType)} 配额信息</b><br>
-            <hr style='margin: 4px 0;'>
-            <b>💰 额度明细</b><br><br>
-            🟢 剩余: $${String.format("%.2f", info.remaining)}<br>
-            🔴 已用: $${String.format("%.2f", info.used)}<br>
-            ⚪ 总额: $${String.format("%.2f", info.total)}<br>
-            📊 使用率: ${String.format("%.1f", info.percentage)}%<br>
-            $speedSection
-            <hr style='margin: 4px 0;'>
-            <div style='color: gray; font-size: small;'>$updateInfo</div>
-            </body>
-            </html>
-        """.trimIndent()
+        val content = StringBuilder()
+        content.append(sectionTitle(getPlatformName(settings.platformType)))
+        content.append(
+            buildTable(
+                listOf("项目", "金额", "比例"),
+                listOf(
+                    listOf("剩余", formatCurrency(info.remaining), formatPercentage(remainPct)),
+                    listOf("已用", formatCurrency(info.used), formatPercentage(usedPct)),
+                    listOf("总额", formatCurrency(info.total), "-")
+                )
+            )
+        )
+        if (speedSection.isNotEmpty()) {
+            content.append(speedSection)
+        }
+
+        return wrapTooltip(content.toString())
     }
 
     private fun buildExtendedTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
-
         val sb = StringBuilder()
-        sb.append("<html><body style='padding: 6px; font-family: sans-serif;'>")
-        sb.append("<b>📊 PackyCode 配额信息</b><br>")
-        sb.append("<hr style='margin: 4px 0;'>")
+        sb.append(sectionTitle("PackyCode"))
 
-        // 用户和套餐信息
-        sb.append("<b>👤 账户信息</b><br><br>")
-        ext.username?.let { sb.append("用户名: $it<br>") }
-        ext.planType?.let { sb.append("套餐: ${getPlanDisplayName(it)}<br>") }
+        val badges = mutableListOf<String>()
+        ext.planType?.let { badges.add(getPlanDisplayName(it)) }
+        ext.planExpiresAt?.let { badges.add("到期 ${getDaysUntil(it)}天后") }
+        ext.balanceUsd?.let { badges.add("余额 ${formatCurrency(it)}") }
+        if (badges.isNotEmpty()) {
+            sb.append(buildBadges(badges))
+        }
+
+        val accountRows = mutableListOf<List<String>>()
+        ext.username?.let { accountRows.add(listOf("用户", it)) }
+        ext.planType?.let { accountRows.add(listOf("套餐", getPlanDisplayName(it))) }
         ext.planExpiresAt?.let {
             val daysLeft = getDaysUntil(it)
-            sb.append("到期时间: ${dateFormat.format(it)} (${daysLeft}天)<br>")
+            accountRows.add(listOf("到期", "${daysLeft}天后"))
         }
-        ext.balanceUsd?.let { sb.append("账户余额: \$${String.format("%.2f", it)}<br>") }
-        ext.totalSpentUsd?.let { sb.append("累计消费: \$${String.format("%.2f", it)}<br>") }
-
-        sb.append("<br><hr style='margin: 4px 0;'>")
-
-        // 本月预算
-        ext.monthly?.let { period ->
-            sb.append("<b>📅 本月预算</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: \$${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: \$${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: \$${String.format("%.2f", period.budget)}<br><br>")
+        ext.balanceUsd?.let { accountRows.add(listOf("余额", formatCurrency(it))) }
+        if (accountRows.isNotEmpty()) {
+            sb.append(buildTable(listOf("项目", "值"), accountRows))
         }
 
-        // 本周预算
-        ext.weekly?.let { period ->
-            val weekLabel = if (ext.weeklyWindowStart != null && ext.weeklyWindowEnd != null) {
-                val start = shortDateFormat.format(ext.weeklyWindowStart)
-                val end = shortDateFormat.format(ext.weeklyWindowEnd)
-                "📆 本周预算 ($start ~ $end)"
-            } else {
-                "📆 本周预算"
-            }
-            sb.append("<b>$weekLabel</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: \$${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: \$${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: \$${String.format("%.2f", period.budget)}<br><br>")
-        }
+        ext.monthly?.let { sb.append(buildBudgetSection("本月", it)) }
+        ext.weekly?.let { sb.append(buildBudgetSection("本周", it)) }
+        ext.daily?.let { sb.append(buildBudgetSection("今日", it)) }
 
-        // 今日预算
-        ext.daily?.let { period ->
-            sb.append("<b>🌅 今日预算</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: \$${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: \$${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: \$${String.format("%.2f", period.budget)}<br>")
-        }
-
-        // 测速结果
         val speedSection = buildSpeedTestSection()
         if (speedSection.isNotEmpty()) {
-            sb.append("<br><hr style='margin: 4px 0;'>")
             sb.append(speedSection)
         }
 
-        sb.append("<hr style='margin: 4px 0;'>")
-        sb.append("<div style='color: gray; font-size: small;'>$updateInfo</div>")
-        sb.append("</body></html>")
-
-        return sb.toString()
+        return wrapTooltip(sb.toString())
     }
 
     private fun buildCubenceTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
-
         val sb = StringBuilder()
-        sb.append("<html><body style='width: 280px; padding: 6px; font-family: sans-serif;'>")
-        sb.append("<table width='100%'><tr><td align='left'><b>📊 Cubence 配额信息</b></td></tr></table>")
-        sb.append("<hr style='margin: 4px 0;'>")
+        sb.append(sectionTitle("Cubence"))
 
-        // Helper to append a data row
-        fun appendDataRow(label: String, value: String) {
-            sb.append("<tr>")
-            sb.append("<td align='left'>$label</td>")
-            sb.append("<td align='right'>$value</td>")
-            sb.append("</tr>")
-        }
-
-        // Helper to append section header
-        fun appendSection(title: String) {
-            sb.append("<table width='100%'><tr><td align='left'><b>$title</b></td></tr></table>")
-            sb.append("<hr style='margin: 4px 0;'>")
-        }
-
-        // 账户余额
         ext.balanceUsd?.let {
-            appendSection("💰 账户余额")
-            sb.append("<table width='100%'>")
-            appendDataRow("💵 余额:", "\$${String.format("%.2f", it)}")
-            sb.append("</table>")
-            sb.append("<br>")
+            sb.append(buildTable(listOf("项目", "金额"), listOf(listOf("余额", formatCurrency(it)))))
         }
 
-        // 预算周期显示逻辑
-        fun appendPeriodSection(title: String, period: BudgetPeriod) {
-            appendSection(title)
-            // 进度条行
-            sb.append("<table width='100%'><tr>")
-            sb.append("<td align='left'>${buildProgressBar(period.percentage)}</td>")
-            sb.append("<td align='right'>${String.format("%.1f", period.percentage)}%</td>")
-            sb.append("</tr></table>")
+        ext.apiKeyQuota?.let { sb.append(buildBudgetSection("API Key 配额", it)) }
+        ext.fiveHour?.let { sb.append(buildBudgetSection("5小时窗口", it)) }
+        ext.weekly?.let { sb.append(buildBudgetSection("本周限制", it)) }
 
-            // 数据行
-            sb.append("<table width='100%'>")
-            appendDataRow("🟢 剩余:", "\$${String.format("%.2f", period.remaining)}")
-            appendDataRow("🔴 已用:", "\$${String.format("%.2f", period.spent)}")
-            appendDataRow("⚪ 限额:", "\$${String.format("%.2f", period.budget)}")
-            sb.append("</table>")
-            sb.append("<br>")
+        val speedSection = buildSpeedTestSection()
+        if (speedSection.isNotEmpty()) {
+            sb.append(speedSection)
         }
 
-        // API Key 配额
-        ext.apiKeyQuota?.let { appendPeriodSection("🔑 API Key 配额", it) }
-
-        // 5小时限制
-        ext.fiveHour?.let { appendPeriodSection("⏱️ 5小时限制窗口", it) }
-
-        // 周限制
-        ext.weekly?.let { appendPeriodSection("📅 本周限制", it) }
-
-        // 测速结果 (内联重写以匹配风格)
-        if (speedResults.isNotEmpty()) {
-            appendSection("🚀 链接测速")
-            sb.append("<table width='100%'>")
-            speedResults.forEach { result ->
-                val color = if (result.status == SpeedTestStatus.SUCCESS) "#62B543" else "#FF0000"
-                val icon = if (result.status == SpeedTestStatus.SUCCESS) "✅" else "❌"
-                val latencyText = if (result.latency != null) "${result.latency}ms" else "Failed"
-                val urlShort = try { java.net.URL(result.url).host } catch (e: Exception) { result.url }
-
-                sb.append("<tr>")
-                sb.append("<td align='left'>$icon $urlShort</td>")
-                sb.append("<td align='right' style='color: $color;'>$latencyText</td>")
-                sb.append("</tr>")
-            }
-            sb.append("</table>")
-            sb.append("<hr style='margin: 4px 0;'>")
-        }
-
-        sb.append("<div style='text-align: right; color: gray; font-size: small;'>$updateInfo</div>")
-        sb.append("</body></html>")
-
-        return sb.toString()
+        return wrapTooltip(sb.toString())
     }
 
     private fun buildSpeedTestSection(): String {
@@ -411,30 +294,80 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             return ""
         }
 
-        val sb = StringBuilder()
-        sb.append("<b>🚀 链接测速</b><br><br>")
-
-        for(result in speedResults) {
+        val rows = speedResults.map { result ->
             val host = shortenUrl(result.url)
-            val icon = when (result.status) {
-                SpeedTestStatus.SUCCESS -> "✅"
-                SpeedTestStatus.FAILED -> "❌"
-                SpeedTestStatus.PENDING -> "⏳"
-            }
             val latency = if (result.status == SpeedTestStatus.SUCCESS && result.latency != null) {
                 "${result.latency}ms"
             } else {
-                result.error ?: "Failed"
+                "-"
             }
-            sb.append("$icon $host: $latency<br>")
+            listOf(host, latency)
         }
 
+        return sectionTitle("测速") + buildTable(listOf("节点", "延迟"), rows)
+    }
+
+    private fun wrapTooltip(content: String): String {
+        return "<html><body style='padding: 8px; font-family: sans-serif;'>$content</body></html>"
+    }
+
+    private fun sectionTitle(title: String): String {
+        return "<div style='font-weight:bold; margin:0 0 6px 0;'>$title</div>"
+    }
+
+    private fun paragraph(text: String): String {
+        return "<div style='margin:0 0 6px 0;'>$text</div>"
+    }
+
+    private fun buildTable(headers: List<String>, rows: List<List<String>>): String {
+        val sb = StringBuilder()
+        sb.append("<table style='border-collapse:collapse; width:100%; margin:0 0 8px 0;'>")
+
+        if (headers.isNotEmpty()) {
+            sb.append("<tr>")
+            headers.forEachIndexed { index, header ->
+                val align = if (index == 0) "left" else "right"
+                sb.append("<th style='padding:0 6px 4px 0; text-align:$align; color:#888; font-weight:normal;'>$header</th>")
+            }
+            sb.append("</tr>")
+        }
+
+        for (row in rows) {
+            sb.append("<tr>")
+            row.forEachIndexed { index, cell ->
+                val align = if (index == 0) "left" else "right"
+                sb.append("<td style='padding:2px 6px 2px 0; text-align:$align;'>$cell</td>")
+            }
+            sb.append("</tr>")
+        }
+
+        sb.append("</table>")
         return sb.toString()
     }
 
-    private fun buildProgressBar(percentage: Double): String {
-        val filled = (percentage / 5).toInt().coerceIn(0, 20)
-        return "█".repeat(filled) + "░".repeat(20 - filled)
+    private fun buildBudgetSection(title: String, period: BudgetPeriod): String {
+        return sectionTitle("$title (已用 ${formatPercentage(period.percentage)})") + buildTable(
+            listOf("项目", "金额"),
+            listOf(
+                listOf("剩余", formatCurrency(period.remaining)),
+                listOf("已用", formatCurrency(period.spent)),
+                listOf("预算", formatCurrency(period.budget))
+            )
+        )
+    }
+
+    private fun formatCurrency(value: Double): String = "$${String.format("%.2f", value)}"
+
+    private fun formatPercentage(value: Double): String = "${String.format("%.1f", value)}%"
+
+    private fun buildBadges(labels: List<String>): String {
+        val sb = StringBuilder()
+        sb.append("<div style='display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px 0;'>")
+        labels.forEach { label ->
+            sb.append("<span style='background:#f2f2f2; border-radius:12px; padding:4px 10px; font-size:12px;'>$label</span>")
+        }
+        sb.append("</div>")
+        return sb.toString()
     }
 
     private fun shortenUrl(url: String): String {
@@ -468,6 +401,32 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             "packycode" -> "PackyCode"
             "cubence" -> "Cubence"
             else -> platformType
+        }
+    }
+
+    /**
+     * 避免悬浮提示被立即关闭：鼠标停留在状态栏时先延迟更新，鼠标离开后再刷新
+     */
+    private fun requestStatusBarUpdate() {
+        val component = statusBar?.component ?: return
+        val mouseOverStatusBar = component.mousePosition != null
+
+        if (!mouseOverStatusBar) {
+            pendingUiUpdate = false
+            statusBar?.updateWidget(ID)
+            return
+        }
+
+        if (pendingUiUpdate) {
+            return
+        }
+        pendingUiUpdate = true
+
+        ApplicationManager.getApplication().executeOnPooledThread {
+            Thread.sleep(500)
+            ApplicationManager.getApplication().invokeLater {
+                requestStatusBarUpdate()
+            }
         }
     }
 
