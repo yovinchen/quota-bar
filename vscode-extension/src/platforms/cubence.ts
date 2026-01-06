@@ -10,6 +10,10 @@ interface CubenceResponse {
         quota_limit_dollar: number;
         quota_used_dollar: number;
         remaining_dollar: number;
+        // 新增 units 字段
+        quota_limit_units: number;
+        quota_used_units: number;
+        remaining_units: number;
     };
     normal_balance: {
         amount_dollar: number;
@@ -59,11 +63,17 @@ export class CubenceAdapter extends BasePlatformAdapter {
             // 辅助函数：Units 转 Dollar (1,000,000 units = 1 dollar)
             const unitsToDollar = (units: number) => units / 1_000_000.0;
 
+            // 辅助函数：时间戳转 Date
+            const timestampToDate = (ts: number | null): Date | undefined => {
+                return ts ? new Date(ts * 1000) : undefined;
+            };
+
             // 1. 解析主要显示数据 (使用 5小时限制)
             const fiveHour = data.subscription_window?.five_hour;
             const fiveHourLimit = unitsToDollar(fiveHour?.limit || 0);
             const fiveHourRemaining = unitsToDollar(fiveHour?.remaining || 0);
             const fiveHourUsed = fiveHourLimit - fiveHourRemaining;
+            const fiveHourResetAt = timestampToDate(fiveHour?.reset_at);
 
             const total = fiveHourLimit;
             const remaining = fiveHourRemaining;
@@ -75,6 +85,7 @@ export class CubenceAdapter extends BasePlatformAdapter {
             const weeklyLimit = unitsToDollar(weekly?.limit || 0);
             const weeklyRemaining = unitsToDollar(weekly?.remaining || 0);
             const weeklyUsed = weeklyLimit - weeklyRemaining;
+            const weeklyResetAt = timestampToDate(weekly?.reset_at);
 
             // API Key 限制
             const apiKey = data.api_key_quota;
@@ -92,13 +103,15 @@ export class CubenceAdapter extends BasePlatformAdapter {
                             budget: fiveHourLimit,
                             spent: fiveHourUsed,
                             remaining: fiveHourRemaining,
-                            percentage: fiveHourLimit > 0 ? (fiveHourUsed / fiveHourLimit) * 100 : 0
+                            percentage: fiveHourLimit > 0 ? (fiveHourUsed / fiveHourLimit) * 100 : 0,
+                            resetAt: fiveHourResetAt
                         },
                         weekly: {
                             budget: weeklyLimit,
                             spent: weeklyUsed,
                             remaining: weeklyRemaining,
-                            percentage: weeklyLimit > 0 ? (weeklyUsed / weeklyLimit) * 100 : 0
+                            percentage: weeklyLimit > 0 ? (weeklyUsed / weeklyLimit) * 100 : 0,
+                            resetAt: weeklyResetAt
                         },
                         apiKeyQuota: {
                             budget: apiKey?.quota_limit_dollar || 0,

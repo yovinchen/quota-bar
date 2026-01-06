@@ -258,21 +258,28 @@ class QuotaServiceImpl : QuotaService {
                 // 2. 解析订阅窗口
                 val subWindow = json.getAsJsonObject("subscription_window")
                 
+                // 辅助函数：时间戳转 Date
+                fun timestampToDate(ts: Long?): Date? {
+                    return if (ts != null && ts > 0) Date(ts * 1000) else null
+                }
+                
                 // 5小时限制 (作为主要显示)
                 val fiveHour = subWindow?.getAsJsonObject("five_hour")
                 val fiveHourLimit = unitsToDollar(fiveHour?.get("limit")?.asLong ?: 0)
                 val fiveHourRemaining = unitsToDollar(fiveHour?.get("remaining")?.asLong ?: 0)
                 val fiveHourUsed = fiveHourLimit - fiveHourRemaining
                 val fiveHourPercent = if (fiveHourLimit > 0) (fiveHourUsed / fiveHourLimit) * 100 else 0.0
-                val fiveHourPeriod = BudgetPeriod(fiveHourLimit, fiveHourUsed, fiveHourRemaining, fiveHourPercent)
+                val fiveHourResetAt = timestampToDate(fiveHour?.get("reset_at")?.asLong)
+                val fiveHourPeriod = BudgetPeriod(fiveHourLimit, fiveHourUsed, fiveHourRemaining, fiveHourPercent, fiveHourResetAt)
 
                 // 周限制
                 val weekly = subWindow?.getAsJsonObject("weekly")
                 val weeklyLimit = unitsToDollar(weekly?.get("limit")?.asLong ?: 0)
                 val weeklyRemaining = unitsToDollar(weekly?.get("remaining")?.asLong ?: 0)
-                val weeklyUsed = weeklyLimit - weeklyRemaining // 注意 weekly.used 在 json 里可能有值，我们优先用计算值保证一致，或者直接取 used
+                val weeklyUsed = weeklyLimit - weeklyRemaining
                 val weeklyPercent = if (weeklyLimit > 0) (weeklyUsed / weeklyLimit) * 100 else 0.0
-                val weeklyPeriod = BudgetPeriod(weeklyLimit, weeklyUsed, weeklyRemaining, weeklyPercent)
+                val weeklyResetAt = timestampToDate(weekly?.get("reset_at")?.asLong)
+                val weeklyPeriod = BudgetPeriod(weeklyLimit, weeklyUsed, weeklyRemaining, weeklyPercent, weeklyResetAt)
 
                 // 3. API Key 配额
                 val apiKeyQuotaJson = json.getAsJsonObject("api_key_quota")

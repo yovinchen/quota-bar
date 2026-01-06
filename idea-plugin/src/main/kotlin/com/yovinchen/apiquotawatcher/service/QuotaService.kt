@@ -9,7 +9,8 @@ data class BudgetPeriod(
     val budget: Double,
     val spent: Double,
     val remaining: Double,
-    val percentage: Double
+    val percentage: Double,
+    val resetAt: Date? = null  // 配额重置时间 (用于 Cubence 等平台)
 )
 
 /**

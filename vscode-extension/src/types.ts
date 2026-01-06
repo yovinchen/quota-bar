@@ -24,6 +24,7 @@ export interface BudgetPeriod {
     spent: number;
     remaining: number;
     percentage: number;
+    resetAt?: Date;  // 配额重置时间 (用于 Cubence 等平台)
 }
 
 /**

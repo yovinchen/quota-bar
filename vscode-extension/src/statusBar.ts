@@ -218,7 +218,7 @@ export class StatusBarService {
             content += `| 余额 | $${ext.balanceUsd.toFixed(2)} |\n\n`;
         }
 
-        // 额度使用表格
+        // 额度使用表格 (带重置时间)
         const quotaRows: { label: string; period: BudgetPeriod }[] = [];
         if (ext.apiKeyQuota) quotaRows.push({ label: 'API Key', period: ext.apiKeyQuota });
         if (ext.fiveHour) quotaRows.push({ label: '5小时', period: ext.fiveHour });
@@ -226,10 +226,13 @@ export class StatusBarService {
 
         if (quotaRows.length > 0) {
             content += `**额度使用**\n\n`;
-            content += `| 周期 | 已用 | 预算 | 进度 |\n`;
-            content += `|:-----|-----:|-----:|:-----|\n`;
+            content += `| 周期 | 已用 | 预算 | 进度 | 重置时间 |\n`;
+            content += `|:-----|-----:|-----:|:-----|:-----|\n`;
             for (const row of quotaRows) {
-                content += `| ${row.label} | $${row.period.spent.toFixed(2)} | $${row.period.budget.toFixed(2)} | ${this.buildProgressBar(row.period.percentage)} |\n`;
+                const resetTimeStr = row.period.resetAt
+                    ? this.formatResetTime(row.period.resetAt)
+                    : '-';
+                content += `| ${row.label} | $${row.period.spent.toFixed(2)} | $${row.period.budget.toFixed(2)} | ${this.buildProgressBar(row.period.percentage)} | ${resetTimeStr} |\n`;
             }
         }
 
@@ -284,14 +287,15 @@ export class StatusBarService {
     }
 
     /**
-     * 构建进度条（使用 Unicode 字符）
+     * 构建进度条（使用 Unicode 字符 + 等宽字体）
      */
     private buildProgressBar(percentage: number): string {
         const pct = Math.min(100, Math.max(0, percentage));
         const filled = Math.round(pct / 10);
         const empty = 10 - filled;
         const bar = '█'.repeat(filled) + '░'.repeat(empty);
-        return `${bar} ${pct.toFixed(1)}%`;
+        // 使用反引号包裹实现等宽字体效果，与 IDEA 插件保持一致
+        return `\`${bar}\` ${pct.toFixed(1)}%`;
     }
 
     /**
@@ -334,6 +338,33 @@ export class StatusBarService {
             month: '2-digit',
             day: '2-digit',
         });
+    }
+
+    /**
+     * 格式化重置时间（用于 Cubence 等平台）
+     * 显示相对时间，如 "3小时后" 或 "2天后"
+     */
+    private formatResetTime(date: Date): string {
+        const now = new Date();
+        const diff = date.getTime() - now.getTime();
+
+        if (diff <= 0) {
+            return '已重置';
+        }
+
+        const minutes = Math.floor(diff / (1000 * 60));
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+        if (days > 0) {
+            const remainingHours = hours % 24;
+            return remainingHours > 0 ? `${days}天${remainingHours}小时` : `${days}天后`;
+        } else if (hours > 0) {
+            const remainingMinutes = minutes % 60;
+            return remainingMinutes > 0 ? `${hours}小时${remainingMinutes}分` : `${hours}小时后`;
+        } else {
+            return `${minutes}分钟后`;
+        }
     }
 
     /**

@@ -10,7 +10,6 @@ import com.yovinchen.apiquotawatcher.service.*
 import com.yovinchen.apiquotawatcher.settings.QuotaSettings
 import java.awt.event.MouseEvent
 import java.net.URL
-import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Timer
 import java.util.TimerTask
@@ -19,8 +18,6 @@ import java.util.concurrent.TimeUnit
 class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, StatusBarWidget.TextPresentation {
 
     private val LOG = Logger.getInstance(QuotaStatusBarWidget::class.java)
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd")
-    private val shortDateFormat = SimpleDateFormat("MM-dd")
 
     private var statusBar: StatusBar? = null
     private var quotaInfo: QuotaInfo? = null
@@ -28,7 +25,6 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
     private var timer: Timer? = null
     private var isLoading = false
     private var lastError: String? = null
-    private var lastUpdateTime: Long = 0
 
     companion object {
         const val ID = "ApiQuotaWatcher"
@@ -88,7 +84,6 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
                 if (newQuotaInfo != null) {
                     quotaInfo = newQuotaInfo
-                    lastUpdateTime = System.currentTimeMillis()
                     LOG.info("Quota fetched: used=${newQuotaInfo.used}, total=${newQuotaInfo.total}, remaining=${newQuotaInfo.remaining}")
                 } else {
                     lastError = "无法获取配额信息，请检查配置"
@@ -178,18 +173,16 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         val settings = QuotaSettings.getInstance().state
 
         if (!settings.enabled) {
-            return "<html><body style='padding: 6px; font-family: sans-serif;'>API 配额监控已禁用</body></html>"
+            return "<html><body style='${tooltipBodyStyle()}'>API 配额监控已禁用</body></html>"
         }
 
         if (lastError != null) {
             return """
                 <html>
-                <body style='padding: 6px; font-family: sans-serif;'>
-                <b>❌ 获取配额失败</b><br>
-                <hr style='margin: 4px 0;'>
-                错误: $lastError<br>
-                <hr style='margin: 4px 0;'>
-                平台: ${getPlatformName(settings.platformType)}
+                <body style='${tooltipBodyStyle()}'>
+                <div style='font-weight: 600; margin-bottom: 4px;'>获取配额失败</div>
+                <div style='color: #B00020; margin-bottom: 6px;'>错误: $lastError</div>
+                <div style='color: #6a737d;'>平台: ${getPlatformName(settings.platformType)}</div>
                 </body>
                 </html>
             """.trimIndent()
@@ -199,11 +192,10 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         if (info == null) {
             return """
                 <html>
-                <body style='padding: 6px; font-family: sans-serif;'>
-                <b>API 配额信息</b><br>
-                <hr style='margin: 4px 0;'>
-                状态: ${if (isLoading) "加载中..." else "未获取"}<br>
-                平台: ${getPlatformName(settings.platformType)}
+                <body style='${tooltipBodyStyle()}'>
+                <div style='font-weight: 600; margin-bottom: 4px;'>API 配额信息</div>
+                <div style='margin-bottom: 6px;'>状态: ${if (isLoading) "加载中..." else "未获取"}</div>
+                <div style='color: #6a737d;'>平台: ${getPlatformName(settings.platformType)}</div>
                 </body>
                 </html>
             """.trimIndent()
@@ -211,12 +203,12 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
         // PackyCode 使用扩展信息
         if (settings.platformType == "packycode" && info.extended != null) {
-            return buildExtendedTooltip(info, info.extended)
+            return buildExtendedTooltip(info.extended)
         }
 
         // Cubence 使用扩展信息
         if (settings.platformType == "cubence" && info.extended != null) {
-            return buildCubenceTooltip(info, info.extended)
+            return buildCubenceTooltip(info.extended)
         }
 
         return buildBasicTooltip(info)
@@ -224,188 +216,191 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
     private fun buildBasicTooltip(info: QuotaInfo): String {
         val settings = QuotaSettings.getInstance().state
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
+        val usedPct = if (info.total > 0) (info.used / info.total) * 100 else 0.0
         val speedSection = buildSpeedTestSection()
 
-        return """
-            <html>
-            <body style='padding: 6px; font-family: sans-serif;'>
-            <b>📊 ${getPlatformName(settings.platformType)} 配额信息</b><br>
-            <hr style='margin: 4px 0;'>
-            <b>💰 额度明细</b><br><br>
-            🟢 剩余: $${String.format("%.2f", info.remaining)}<br>
-            🔴 已用: $${String.format("%.2f", info.used)}<br>
-            ⚪ 总额: $${String.format("%.2f", info.total)}<br>
-            📊 使用率: ${String.format("%.1f", info.percentage)}%<br>
-            $speedSection
-            <hr style='margin: 4px 0;'>
-            <div style='color: gray; font-size: small;'>$updateInfo</div>
-            </body>
-            </html>
-        """.trimIndent()
+        val sb = StringBuilder()
+        sb.append("<html><body style='${tooltipBodyStyle()}'>")
+        sb.append("<div style='font-weight: 600; margin-bottom: 6px;'>${getPlatformName(settings.platformType)}</div>")
+        sb.append("<table style='width: 100%; border-collapse: collapse;'>")
+        appendTableHeader(sb, listOf("周期", "已用", "预算", "进度"), listOf("left", "right", "right", "left"))
+        appendTableRow(
+            sb,
+            listOf(
+                "总额度",
+                "$${String.format("%.2f", info.used)}",
+                "$${String.format("%.2f", info.total)}",
+                buildProgressBar(usedPct)
+            ),
+            listOf("left", "right", "right", "left")
+        )
+        sb.append("</table>")
+        if (speedSection.isNotEmpty()) {
+            sb.append(speedSection)
+        }
+        sb.append("</body></html>")
+        return sb.toString()
     }
 
-    private fun buildExtendedTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
-
+    private fun buildExtendedTooltip(ext: ExtendedQuotaData): String {
         val sb = StringBuilder()
-        sb.append("<html><body style='padding: 6px; font-family: sans-serif;'>")
-        sb.append("<b>📊 PackyCode 配额信息</b><br>")
-        sb.append("<hr style='margin: 4px 0;'>")
+        sb.append("<html><body style='${tooltipBodyStyle()}'>")
+        sb.append("<div style='font-weight: 600; margin-bottom: 6px;'>PackyCode</div>")
 
-        // 账户信息
-        sb.append("<b>👤 账户信息</b><br><br>")
-        ext.username?.let { sb.append("用户名: $it<br>") }
-        ext.planType?.let { sb.append("套餐: ${getPlanDisplayName(it)}<br>") }
+        val accountRows = mutableListOf<Pair<String, String>>()
+        ext.username?.let { accountRows.add("用户" to it) }
+        ext.planType?.let { accountRows.add("套餐" to getPlanDisplayName(it)) }
         ext.planExpiresAt?.let {
             val daysLeft = getDaysUntil(it)
-            sb.append("到期时间: ${dateFormat.format(it)} (${daysLeft}天)<br>")
+            accountRows.add("到期" to "${daysLeft}天后")
         }
-        ext.balanceUsd?.let { sb.append("账户余额: $${String.format("%.2f", it)}<br>") }
-        ext.totalSpentUsd?.let { sb.append("累计消费: $${String.format("%.2f", it)}<br>") }
+        ext.balanceUsd?.let { accountRows.add("余额" to "$${String.format("%.2f", it)}") }
+        appendKeyValueTable(sb, "项目", "值", accountRows)
 
-        sb.append("<br><hr style='margin: 4px 0;'>")
-
-        // 月度预算
+        val quotaRows = mutableListOf<List<String>>()
         ext.monthly?.let { period ->
-            sb.append("<b>📅 本月预算</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: $${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: $${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: $${String.format("%.2f", period.budget)}<br><br>")
+            quotaRows.add(buildQuotaRowSimple("本月", period))
         }
-
-        // 周度预算
         ext.weekly?.let { period ->
-            val weekLabel = if (ext.weeklyWindowStart != null && ext.weeklyWindowEnd != null) {
-                val start = shortDateFormat.format(ext.weeklyWindowStart)
-                val end = shortDateFormat.format(ext.weeklyWindowEnd)
-                "📆 本周预算 ($start ~ $end)"
-            } else {
-                "📆 本周预算"
-            }
-            sb.append("<b>$weekLabel</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: $${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: $${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: $${String.format("%.2f", period.budget)}<br><br>")
+            quotaRows.add(buildQuotaRowSimple("本周", period))
+        }
+        ext.daily?.let { period ->
+            quotaRows.add(buildQuotaRowSimple("今日", period))
         }
 
-        // 日度预算
-        ext.daily?.let { period ->
-            sb.append("<b>🌅 今日预算</b><br><br>")
-            sb.append("${buildProgressBar(period.percentage)} ${String.format("%.1f", period.percentage)}%<br>")
-            sb.append("🟢 剩余: $${String.format("%.2f", period.remaining)}<br>")
-            sb.append("🔴 已用: $${String.format("%.2f", period.spent)}<br>")
-            sb.append("⚪ 预算: $${String.format("%.2f", period.budget)}<br>")
+        if (quotaRows.isNotEmpty()) {
+            sb.append("<div style='font-weight: 600; margin: 8px 0 4px 0;'>额度使用</div>")
+            appendQuotaTableSimple(sb, quotaRows)
         }
 
         val speedSection = buildSpeedTestSection()
         if (speedSection.isNotEmpty()) {
-            sb.append("<br><hr style='margin: 4px 0;'>")
             sb.append(speedSection)
         }
 
-        sb.append("<hr style='margin: 4px 0;'>")
-        sb.append("<div style='color: gray; font-size: small;'>$updateInfo</div>")
         sb.append("</body></html>")
 
         return sb.toString()
     }
 
-    private fun buildCubenceTooltip(info: QuotaInfo, ext: ExtendedQuotaData): String {
-        val updateInfo = if (lastUpdateTime > 0) {
-            val elapsed = (System.currentTimeMillis() - lastUpdateTime) / 1000
-            "🕐 更新于: ${elapsed}秒前"
-        } else ""
-
+    private fun buildCubenceTooltip(ext: ExtendedQuotaData): String {
         val sb = StringBuilder()
-        sb.append("<html><body style='width: 280px; padding: 6px; font-family: sans-serif;'>")
-        sb.append("<table width='100%'><tr><td align='left'><b>📊 Cubence 配额信息</b></td></tr></table>")
-        sb.append("<hr style='margin: 4px 0;'>")
+        sb.append("<html><body style='${tooltipBodyStyle()}'>")
+        sb.append("<div style='font-weight: 600; margin-bottom: 6px;'>Cubence</div>")
 
-        // 账户余额
-        ext.balanceUsd?.let {
-            appendSection(sb, "💰 账户余额")
-            sb.append("<table width='100%'>")
-            appendDataRow(sb, "💵 余额:", "$${String.format("%.2f", it)}")
-            sb.append("</table>")
-            sb.append("<br>")
+        val balanceRows = mutableListOf<Pair<String, String>>()
+        ext.balanceUsd?.let { balanceRows.add("余额" to "$${String.format("%.2f", it)}") }
+        appendKeyValueTable(sb, "项目", "金额", balanceRows)
+
+        val quotaRows = mutableListOf<List<String>>()
+        ext.apiKeyQuota?.let { period ->
+            quotaRows.add(buildQuotaRowWithReset("API Key", period))
+        }
+        ext.fiveHour?.let { period ->
+            quotaRows.add(buildQuotaRowWithReset("5小时", period))
+        }
+        ext.weekly?.let { period ->
+            quotaRows.add(buildQuotaRowWithReset("本周", period))
         }
 
-        // API Key 配额
-        ext.apiKeyQuota?.let {
-            appendPeriodSection(sb, "🔑 API Key 配额", it)
+        if (quotaRows.isNotEmpty()) {
+            sb.append("<div style='font-weight: 600; margin: 8px 0 4px 0;'>额度使用</div>")
+            appendQuotaTableWithReset(sb, quotaRows)
         }
 
-        // 5小时限制
-        ext.fiveHour?.let {
-            appendPeriodSection(sb, "⏱️ 5小时限制窗口", it)
+        val speedSection = buildSpeedTestSection()
+        if (speedSection.isNotEmpty()) {
+            sb.append(speedSection)
         }
 
-        // 周限制
-        ext.weekly?.let {
-            appendPeriodSection(sb, "📅 本周限制", it)
-        }
-
-        // 测速结果
-        if (speedResults.isNotEmpty()) {
-            appendSection(sb, "🚀 链接测速")
-            sb.append("<table width='100%'>")
-            for (result in speedResults) {
-                val color = if (result.status == SpeedTestStatus.SUCCESS) "#62B543" else "#FF0000"
-                val icon = if (result.status == SpeedTestStatus.SUCCESS) "✅" else "❌"
-                val latencyText = if (result.latency != null) "${result.latency}ms" else "Failed"
-                val urlShort = try {
-                    URL(result.url).host
-                } catch (e: Exception) {
-                    result.url
-                }
-                sb.append("<tr>")
-                sb.append("<td align='left'>$icon $urlShort</td>")
-                sb.append("<td align='right' style='color: $color;'>$latencyText</td>")
-                sb.append("</tr>")
-            }
-            sb.append("</table>")
-            sb.append("<hr style='margin: 4px 0;'>")
-        }
-
-        sb.append("<div style='text-align: right; color: gray; font-size: small;'>$updateInfo</div>")
         sb.append("</body></html>")
 
         return sb.toString()
     }
 
-    private fun appendSection(sb: StringBuilder, title: String) {
-        sb.append("<table width='100%'><tr><td align='left'><b>$title</b></td></tr></table>")
-        sb.append("<hr style='margin: 4px 0;'>")
+    private fun appendKeyValueTable(
+        sb: StringBuilder,
+        leftHeader: String,
+        rightHeader: String,
+        rows: List<Pair<String, String>>
+    ) {
+        if (rows.isEmpty()) {
+            return
+        }
+        sb.append("<table style='width: 100%; border-collapse: collapse;'>")
+        appendTableHeader(sb, listOf(leftHeader, rightHeader), listOf("left", "right"))
+        for (row in rows) {
+            appendTableRow(sb, listOf(row.first, row.second), listOf("left", "right"))
+        }
+        sb.append("</table>")
     }
 
-    private fun appendDataRow(sb: StringBuilder, label: String, value: String) {
+    /**
+     * 额度表格 - 带重置时间 (Cubence 用)
+     */
+    private fun appendQuotaTableWithReset(sb: StringBuilder, rows: List<List<String>>) {
+        sb.append("<table style='width: 100%; border-collapse: collapse;'>")
+        appendTableHeader(sb, listOf("周期", "已用", "预算", "进度", "重置时间"), listOf("left", "right", "right", "left", "left"))
+        for (row in rows) {
+            appendTableRow(sb, row, listOf("left", "right", "right", "left", "left"))
+        }
+        sb.append("</table>")
+    }
+
+    /**
+     * 额度表格 - 不带重置时间 (PackyCode/PackyAPI 用)
+     */
+    private fun appendQuotaTableSimple(sb: StringBuilder, rows: List<List<String>>) {
+        sb.append("<table style='width: 100%; border-collapse: collapse;'>")
+        appendTableHeader(sb, listOf("周期", "已用", "预算", "进度"), listOf("left", "right", "right", "left"))
+        for (row in rows) {
+            appendTableRow(sb, row, listOf("left", "right", "right", "left"))
+        }
+        sb.append("</table>")
+    }
+
+    private fun appendTableHeader(sb: StringBuilder, headers: List<String>, aligns: List<String>) {
         sb.append("<tr>")
-        sb.append("<td align='left'>$label</td>")
-        sb.append("<td align='right'>$value</td>")
+        for (i in headers.indices) {
+            val align = aligns.getOrNull(i) ?: "left"
+            sb.append("<th align='$align' style='padding: 2px 4px; color: #6a737d; font-weight: normal; white-space: nowrap;'>${headers[i]}</th>")
+        }
         sb.append("</tr>")
     }
 
-    private fun appendPeriodSection(sb: StringBuilder, title: String, period: BudgetPeriod) {
-        appendSection(sb, title)
-        sb.append("<table width='100%'><tr>")
-        sb.append("<td align='left'>${buildProgressBar(period.percentage)}</td>")
-        sb.append("<td align='right'>${String.format("%.1f", period.percentage)}%</td>")
-        sb.append("</tr></table>")
-        sb.append("<table width='100%'>")
-        appendDataRow(sb, "🟢 剩余:", "$${String.format("%.2f", period.remaining)}")
-        appendDataRow(sb, "🔴 已用:", "$${String.format("%.2f", period.spent)}")
-        appendDataRow(sb, "⚪ 限额:", "$${String.format("%.2f", period.budget)}")
-        sb.append("</table>")
-        sb.append("<br>")
+    private fun appendTableRow(sb: StringBuilder, cells: List<String>, aligns: List<String>) {
+        sb.append("<tr>")
+        for (i in cells.indices) {
+            val align = aligns.getOrNull(i) ?: "left"
+            sb.append("<td align='$align' style='padding: 2px 4px; white-space: nowrap;'>${cells[i]}</td>")
+        }
+        sb.append("</tr>")
+    }
+
+    /**
+     * 构建额度行 - 带重置时间 (Cubence 用)
+     */
+    private fun buildQuotaRowWithReset(label: String, period: BudgetPeriod): List<String> {
+        val resetTimeStr = period.resetAt?.let { formatResetTime(it) } ?: "-"
+        return listOf(
+            label,
+            "$${String.format("%.2f", period.spent)}",
+            "$${String.format("%.2f", period.budget)}",
+            buildProgressBar(period.percentage),
+            resetTimeStr
+        )
+    }
+
+    /**
+     * 构建额度行 - 不带重置时间 (PackyCode/PackyAPI 用)
+     */
+    private fun buildQuotaRowSimple(label: String, period: BudgetPeriod): List<String> {
+        return listOf(
+            label,
+            "$${String.format("%.2f", period.spent)}",
+            "$${String.format("%.2f", period.budget)}",
+            buildProgressBar(period.percentage)
+        )
     }
 
     private fun buildSpeedTestSection(): String {
@@ -414,29 +409,35 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         }
 
         val sb = StringBuilder()
-        sb.append("<b>🚀 链接测速</b><br><br>")
-
+        sb.append("<div style='font-weight: 600; margin: 8px 0 4px 0;'>测速</div>")
+        sb.append("<table style='width: 100%; border-collapse: collapse;'>")
+        appendTableHeader(sb, listOf("节点", "延迟"), listOf("left", "right"))
         for (result in speedResults) {
             val host = shortenUrl(result.url)
-            val icon = when (result.status) {
-                SpeedTestStatus.SUCCESS -> "✅"
-                SpeedTestStatus.FAILED -> "❌"
-                SpeedTestStatus.PENDING -> "⏳"
-            }
             val latency = if (result.status == SpeedTestStatus.SUCCESS && result.latency != null) {
                 "${result.latency}ms"
             } else {
-                result.error ?: "Failed"
+                "-"
             }
-            sb.append("$icon $host: $latency<br>")
+            appendTableRow(sb, listOf(host, latency), listOf("left", "right"))
         }
+        sb.append("</table>")
 
         return sb.toString()
     }
 
     private fun buildProgressBar(percentage: Double): String {
-        val filled = (percentage / 5).toInt().coerceIn(0, 20)
-        return "█".repeat(filled) + "░".repeat(20 - filled)
+        val pct = percentage.coerceIn(0.0, 100.0)
+        val filled = Math.round(pct / 10).toInt().coerceIn(0, 10)
+        val empty = 10 - filled
+        // 使用 Unicode 块字符: █ (实心) ░ (阴影)，与 VS Code 插件保持一致
+        val bar = "█".repeat(filled) + "░".repeat(empty)
+        return "<span style='font-family: monospace; white-space: nowrap;'>$bar ${String.format("%.1f", pct)}%</span>"
+    }
+
+    private fun tooltipBodyStyle(): String {
+        return "padding: 8px 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; " +
+            "font-size: 12px; color: #1f2328; min-width: 280px; line-height: 1.4;"
     }
 
     private fun shortenUrl(url: String): String {
@@ -451,6 +452,35 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         val now = System.currentTimeMillis()
         val diff = date.time - now
         return TimeUnit.MILLISECONDS.toDays(diff)
+    }
+
+    /**
+     * 格式化重置时间（用于 Cubence 等平台）
+     * 显示相对时间，如 "3小时后" 或 "2天后"
+     */
+    private fun formatResetTime(date: Date): String {
+        val now = System.currentTimeMillis()
+        val diff = date.time - now
+        
+        if (diff <= 0) {
+            return "已重置"
+        }
+        
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(diff)
+        val hours = TimeUnit.MILLISECONDS.toHours(diff)
+        val days = TimeUnit.MILLISECONDS.toDays(diff)
+        
+        return when {
+            days > 0 -> {
+                val remainingHours = hours % 24
+                if (remainingHours > 0) "${days}天${remainingHours}小时" else "${days}天后"
+            }
+            hours > 0 -> {
+                val remainingMinutes = minutes % 60
+                if (remainingMinutes > 0) "${hours}小时${remainingMinutes}分" else "${hours}小时后"
+            }
+            else -> "${minutes}分钟后"
+        }
     }
 
     private fun getPlanDisplayName(planType: String): String {
