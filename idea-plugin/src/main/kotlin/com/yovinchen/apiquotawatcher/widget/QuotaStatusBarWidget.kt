@@ -126,8 +126,10 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
         val info = quotaInfo ?: return "API: --"
 
+        // 根据平台类型和配置获取对应的使用数据
+        val displayData = getDisplayQuota(info, settings)
         val parts = mutableListOf<String>()
-        val remainPct = if (info.total > 0) (info.remaining / info.total) * 100 else 0.0
+        val remainPct = if (displayData.total > 0) (displayData.remaining / displayData.total) * 100 else 0.0
         val usedPct = 100 - remainPct
 
         // 状态图标
@@ -140,6 +142,12 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
             parts.add(icon)
         }
 
+        // 进度条展示（状态栏上的可视化进度条）
+        if (settings.widgetProgressBar) {
+            val progressBar = buildStatusBarProgressBar(usedPct)
+            parts.add(progressBar)
+        }
+
         // 状态比例
         if (settings.widgetPercentage) {
             parts.add("${String.format("%.1f", usedPct)}%")
@@ -147,12 +155,12 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
 
         // 已使用金额
         if (settings.widgetUsed) {
-            parts.add("$${String.format("%.2f", info.used)}")
+            parts.add("$${String.format("%.2f", displayData.used)}")
         }
 
         // 总金额
         if (settings.widgetTotal) {
-            parts.add("$${String.format("%.2f", info.total)}")
+            parts.add("$${String.format("%.2f", displayData.total)}")
         }
 
         // 测速延迟
@@ -167,6 +175,92 @@ class QuotaStatusBarWidget(private val project: Project) : StatusBarWidget, Stat
         }
 
         return if (parts.isNotEmpty()) parts.joinToString(" ") else "API: --"
+    }
+
+    /**
+     * 构建状态栏进度条（精细版，使用 Unicode 块字符实现平滑过渡）
+     * 10 格 x 8 段 = 可精确到 1.25% 的进度显示
+     */
+    private fun buildStatusBarProgressBar(percentage: Double): String {
+        val pct = percentage.coerceIn(0.0, 100.0)
+        val totalBlocks = 10 // 总格数
+        val filledBlocks = (pct / 100.0) * totalBlocks
+        
+        // Unicode 块字符：从满到空的 8 段
+        val blocks = charArrayOf('█', '▉', '▊', '▋', '▌', '▍', '▎', '▏', ' ')
+        
+        val result = StringBuilder()
+        for (i in 0 until totalBlocks) {
+            val blockValue = filledBlocks - i
+            when {
+                blockValue >= 1.0 -> result.append(blocks[0]) // 完全填充 █
+                blockValue > 0 -> {
+                    // 部分填充：根据小数部分选择对应的块字符
+                    val partialIndex = ((1 - blockValue) * 8).toInt().coerceIn(0, 7)
+                    result.append(blocks[partialIndex])
+                }
+                else -> result.append('░') // 空格用灰色块表示
+            }
+        }
+        return result.toString()
+    }
+
+    /**
+     * 显示数据封装类
+     */
+    data class DisplayQuota(val used: Double, val total: Double, val remaining: Double)
+
+    /**
+     * 根据平台类型和进度条模式获取要显示的配额数据
+     */
+    private fun getDisplayQuota(info: QuotaInfo, settings: QuotaSettings.State): DisplayQuota {
+        val platformType = settings.platformType
+        val extended = info.extended
+
+        // PackyCode 平台：根据配置选择今日/本周/本月
+        if (platformType == "packycode" && extended != null) {
+            val mode = settings.packycodeProgressMode
+            val period = getPackyCodePeriodByMode(extended, mode)
+            if (period != null) {
+                return DisplayQuota(period.spent, period.budget, period.remaining)
+            }
+        }
+
+        // Cubence 平台：根据配置选择5小时/本周/API Key
+        if (platformType == "cubence" && extended != null) {
+            val mode = settings.cubenceProgressMode
+            val period = getCubencePeriodByMode(extended, mode)
+            if (period != null) {
+                return DisplayQuota(period.spent, period.budget, period.remaining)
+            }
+        }
+
+        // 默认返回基础数据（NewAPI/PackyAPI 等）
+        return DisplayQuota(info.used, info.total, info.remaining)
+    }
+
+    /**
+     * 根据 PackyCode 进度条模式获取对应的预算周期
+     */
+    private fun getPackyCodePeriodByMode(extended: ExtendedQuotaData, mode: String): BudgetPeriod? {
+        return when (mode) {
+            "daily" -> extended.daily
+            "weekly" -> extended.weekly
+            "monthly" -> extended.monthly
+            else -> extended.daily
+        }
+    }
+
+    /**
+     * 根据 Cubence 进度条模式获取对应的预算周期
+     */
+    private fun getCubencePeriodByMode(extended: ExtendedQuotaData, mode: String): BudgetPeriod? {
+        return when (mode) {
+            "fiveHour" -> extended.fiveHour
+            "weekly" -> extended.weekly
+            "apiKey" -> extended.apiKeyQuota
+            else -> extended.fiveHour
+        }
     }
 
     override fun getTooltipText(): String {

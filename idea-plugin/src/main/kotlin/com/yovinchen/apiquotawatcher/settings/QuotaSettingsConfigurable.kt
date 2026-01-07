@@ -20,6 +20,7 @@ class QuotaSettingsConfigurable : Configurable {
     private var widgetUsedCheckBox: JCheckBox? = null
     private var widgetTotalCheckBox: JCheckBox? = null
     private var widgetLatencyCheckBox: JCheckBox? = null
+    private var widgetProgressBarCheckBox: JCheckBox? = null
 
     // NewAPI fields
     private var newapiBaseUrlField: JTextField? = null
@@ -37,11 +38,13 @@ class QuotaSettingsConfigurable : Configurable {
     private var packycodeBaseUrlField: JTextField? = null
     private var packycodeAccessTokenField: JPasswordField? = null
     private var packycodeSpeedTestUrlsField: JTextArea? = null
+    private var packycodeProgressModeComboBox: JComboBox<String>? = null
 
     // Cubence fields (不需要 userId)
     private var cubenceBaseUrlField: JTextField? = null
     private var cubenceAccessTokenField: JPasswordField? = null
     private var cubenceSpeedTestUrlsField: JTextArea? = null
+    private var cubenceProgressModeComboBox: JComboBox<String>? = null
 
     // 默认值常量
     companion object {
@@ -110,6 +113,9 @@ class QuotaSettingsConfigurable : Configurable {
         widgetLatencyCheckBox = JCheckBox("测速延迟")
         addField(mainPanel!!, "", widgetLatencyCheckBox!!, gbc, row++)
 
+        widgetProgressBarCheckBox = JCheckBox("进度条展示")
+        addField(mainPanel!!, "", widgetProgressBarCheckBox!!, gbc, row++)
+
         val resetButton = JButton("恢复默认配置")
         resetButton.addActionListener { resetToDefaults() }
         addField(mainPanel!!, "", resetButton, gbc, row++)
@@ -169,6 +175,12 @@ class QuotaSettingsConfigurable : Configurable {
         }
         addField(mainPanel!!, "测速地址:", JScrollPane(packycodeSpeedTestUrlsField), gbc, row++)
 
+        // PackyCode 进度条模式选择
+        packycodeProgressModeComboBox = JComboBox(arrayOf("daily", "weekly", "monthly")).apply {
+            toolTipText = "选择状态栏中优先显示哪个周期的使用情况: daily=今日, weekly=本周, monthly=本月"
+        }
+        addField(mainPanel!!, "进度条模式:", packycodeProgressModeComboBox!!, gbc, row++)
+
         // Cubence settings section (不需要 userId)
         addSectionHeader(mainPanel!!, "Cubence", gbc, row++)
 
@@ -185,6 +197,12 @@ class QuotaSettingsConfigurable : Configurable {
             lineWrap = true
         }
         addField(mainPanel!!, "测速地址:", JScrollPane(cubenceSpeedTestUrlsField), gbc, row++)
+
+        // Cubence 进度条模式选择
+        cubenceProgressModeComboBox = JComboBox(arrayOf("fiveHour", "weekly", "apiKey")).apply {
+            toolTipText = "选择状态栏中优先显示哪个周期的使用情况: fiveHour=5小时, weekly=本周, apiKey=API Key配额"
+        }
+        addField(mainPanel!!, "进度条模式:", cubenceProgressModeComboBox!!, gbc, row++)
 
         // Add filler
         gbc.gridy = row
@@ -243,6 +261,7 @@ class QuotaSettingsConfigurable : Configurable {
                 widgetUsedCheckBox?.isSelected != settings.widgetUsed ||
                 widgetTotalCheckBox?.isSelected != settings.widgetTotal ||
                 widgetLatencyCheckBox?.isSelected != settings.widgetLatency ||
+                widgetProgressBarCheckBox?.isSelected != settings.widgetProgressBar ||
                 newapiBaseUrlField?.text != settings.newapiBaseUrl ||
                 String(newapiAccessTokenField?.password ?: charArrayOf()) != settings.newapiAccessToken ||
                 newapiUserIdField?.text != settings.newapiUserId ||
@@ -254,9 +273,11 @@ class QuotaSettingsConfigurable : Configurable {
                 packycodeBaseUrlField?.text != settings.packycodeBaseUrl ||
                 String(packycodeAccessTokenField?.password ?: charArrayOf()) != settings.packycodeAccessToken ||
                 packycodeSpeedTestUrlsField?.text != urlsToText(settings.packycodeSpeedTestUrls) ||
+                packycodeProgressModeComboBox?.selectedItem != settings.packycodeProgressMode ||
                 cubenceBaseUrlField?.text != settings.cubenceBaseUrl ||
                 String(cubenceAccessTokenField?.password ?: charArrayOf()) != settings.cubenceAccessToken ||
-                cubenceSpeedTestUrlsField?.text != urlsToText(settings.cubenceSpeedTestUrls)
+                cubenceSpeedTestUrlsField?.text != urlsToText(settings.cubenceSpeedTestUrls) ||
+                cubenceProgressModeComboBox?.selectedItem != settings.cubenceProgressMode
     }
 
     override fun apply() {
@@ -270,6 +291,7 @@ class QuotaSettingsConfigurable : Configurable {
         settings.widgetUsed = widgetUsedCheckBox?.isSelected ?: false
         settings.widgetTotal = widgetTotalCheckBox?.isSelected ?: false
         settings.widgetLatency = widgetLatencyCheckBox?.isSelected ?: true
+        settings.widgetProgressBar = widgetProgressBarCheckBox?.isSelected ?: true
 
         settings.newapiBaseUrl = newapiBaseUrlField?.text ?: ""
         settings.newapiAccessToken = String(newapiAccessTokenField?.password ?: charArrayOf())
@@ -290,6 +312,7 @@ class QuotaSettingsConfigurable : Configurable {
         settings.packycodeAccessToken = String(packycodeAccessTokenField?.password ?: charArrayOf())
         val packycodeSpeedUrls = textToUrls(packycodeSpeedTestUrlsField?.text ?: "")
         settings.packycodeSpeedTestUrls = if (packycodeSpeedUrls.isEmpty()) DEFAULT_PACKYCODE_SPEED_TEST_URLS.toMutableList() else packycodeSpeedUrls
+        settings.packycodeProgressMode = packycodeProgressModeComboBox?.selectedItem as? String ?: "daily"
 
         // Cubence：如果为空，使用默认值
         val cubenceUrl = cubenceBaseUrlField?.text?.trim() ?: ""
@@ -297,6 +320,7 @@ class QuotaSettingsConfigurable : Configurable {
         settings.cubenceAccessToken = String(cubenceAccessTokenField?.password ?: charArrayOf())
         val cubenceSpeedUrls = textToUrls(cubenceSpeedTestUrlsField?.text ?: "")
         settings.cubenceSpeedTestUrls = if (cubenceSpeedUrls.isEmpty()) DEFAULT_CUBENCE_SPEED_TEST_URLS.toMutableList() else cubenceSpeedUrls
+        settings.cubenceProgressMode = cubenceProgressModeComboBox?.selectedItem as? String ?: "fiveHour"
     }
 
     override fun reset() {
@@ -310,6 +334,7 @@ class QuotaSettingsConfigurable : Configurable {
         widgetUsedCheckBox?.isSelected = settings.widgetUsed
         widgetTotalCheckBox?.isSelected = settings.widgetTotal
         widgetLatencyCheckBox?.isSelected = settings.widgetLatency
+        widgetProgressBarCheckBox?.isSelected = settings.widgetProgressBar
 
         newapiBaseUrlField?.text = settings.newapiBaseUrl
         newapiAccessTokenField?.text = settings.newapiAccessToken
@@ -328,12 +353,14 @@ class QuotaSettingsConfigurable : Configurable {
         packycodeAccessTokenField?.text = settings.packycodeAccessToken
         val packycodeUrls = if (settings.packycodeSpeedTestUrls.isEmpty()) DEFAULT_PACKYCODE_SPEED_TEST_URLS else settings.packycodeSpeedTestUrls
         packycodeSpeedTestUrlsField?.text = urlsToText(packycodeUrls)
+        packycodeProgressModeComboBox?.selectedItem = settings.packycodeProgressMode
 
         // Cubence：如果为空，显示默认值
         cubenceBaseUrlField?.text = settings.cubenceBaseUrl.ifEmpty { DEFAULT_CUBENCE_BASE_URL }
         cubenceAccessTokenField?.text = settings.cubenceAccessToken
         val cubenceUrls = if (settings.cubenceSpeedTestUrls.isEmpty()) DEFAULT_CUBENCE_SPEED_TEST_URLS else settings.cubenceSpeedTestUrls
         cubenceSpeedTestUrlsField?.text = urlsToText(cubenceUrls)
+        cubenceProgressModeComboBox?.selectedItem = settings.cubenceProgressMode
     }
 
     private fun resetToDefaults() {
@@ -346,6 +373,7 @@ class QuotaSettingsConfigurable : Configurable {
         widgetUsedCheckBox?.isSelected = false
         widgetTotalCheckBox?.isSelected = false
         widgetLatencyCheckBox?.isSelected = true
+        widgetProgressBarCheckBox?.isSelected = true
 
         newapiBaseUrlField?.text = ""
         newapiAccessTokenField?.text = ""
@@ -360,9 +388,11 @@ class QuotaSettingsConfigurable : Configurable {
         packycodeBaseUrlField?.text = DEFAULT_PACKYCODE_BASE_URL
         packycodeAccessTokenField?.text = ""
         packycodeSpeedTestUrlsField?.text = urlsToText(DEFAULT_PACKYCODE_SPEED_TEST_URLS)
+        packycodeProgressModeComboBox?.selectedItem = "daily"
 
         cubenceBaseUrlField?.text = DEFAULT_CUBENCE_BASE_URL
         cubenceAccessTokenField?.text = ""
         cubenceSpeedTestUrlsField?.text = urlsToText(DEFAULT_CUBENCE_SPEED_TEST_URLS)
+        cubenceProgressModeComboBox?.selectedItem = "fiveHour"
     }
 }

@@ -114,6 +114,12 @@
                         "default": true,
                         "order": 9,
                         "description": "显示测速延迟"
+                    },
+                    "quota-bar.widgets.progressBar": {
+                        "type": "boolean",
+                        "default": true,
+                        "order": 10,
+                        "description": "显示进度条（状态栏上展示使用量进度）"
                     }
                 }
             },
@@ -214,6 +220,22 @@
                         ],
                         "order": 3,
                         "description": "测速地址列表"
+                    },
+                    "quota-bar.packycode.progressMode": {
+                        "type": "string",
+                        "enum": [
+                            "daily",
+                            "weekly",
+                            "monthly"
+                        ],
+                        "enumDescriptions": [
+                            "今日预算 - 显示今日使用情况",
+                            "本周预算 - 显示本周使用情况",
+                            "本月预算 - 显示本月使用情况"
+                        ],
+                        "default": "daily",
+                        "order": 4,
+                        "description": "进度条显示模式：选择在状态栏和悬浮提示中优先显示哪个周期的使用情况"
                     }
                 }
             },
@@ -246,6 +268,22 @@
                         ],
                         "order": 3,
                         "description": "测速地址列表"
+                    },
+                    "quota-bar.cubence.progressMode": {
+                        "type": "string",
+                        "enum": [
+                            "fiveHour",
+                            "weekly",
+                            "apiKey"
+                        ],
+                        "enumDescriptions": [
+                            "5小时限额 - 显示当前5小时窗口使用情况",
+                            "本周限额 - 显示本周使用情况",
+                            "API Key配额 - 显示API Key总配额使用情况"
+                        ],
+                        "default": "fiveHour",
+                        "order": 4,
+                        "description": "进度条显示模式：选择在状态栏和悬浮提示中优先显示哪个周期的使用情况"
                     }
                 }
             }

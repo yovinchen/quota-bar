@@ -8,6 +8,16 @@
 export type PlatformType = 'newapi' | 'packyapi' | 'packycode' | 'cubence';
 
 /**
+ * PackyCode 进度条显示模式
+ */
+export type PackyCodeProgressMode = 'daily' | 'weekly' | 'monthly';
+
+/**
+ * Cubence 进度条显示模式
+ */
+export type CubenceProgressMode = 'fiveHour' | 'weekly' | 'apiKey';
+
+/**
  * 平台凭证配置
  */
 export interface PlatformCredentials {
@@ -120,6 +130,7 @@ export interface WidgetConfig {
     used: boolean;         // 已使用金额
     total: boolean;        // 总金额
     latency: boolean;      // 测速延迟
+    progressBar: boolean;  // 进度条展示
 }
 
 /**
@@ -133,6 +144,9 @@ export interface Config {
     widgets: WidgetConfig;
     // 当前平台的配置
     platform: PlatformConfig;
+    // 进度条显示模式（各平台独立配置）
+    packycodeProgressMode: PackyCodeProgressMode;
+    cubenceProgressMode: CubenceProgressMode;
 }
 
 export interface QuotaConfig extends PlatformCredentials { }

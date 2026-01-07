@@ -3,7 +3,7 @@
  */
 
 import * as vscode from 'vscode';
-import { QuotaSnapshot, Config, SpeedTestResult, ExtendedQuotaData, BudgetPeriod } from './types';
+import { QuotaSnapshot, Config, SpeedTestResult, ExtendedQuotaData, BudgetPeriod, PackyCodeProgressMode, CubenceProgressMode } from './types';
 import { i18n } from './i18n';
 
 export class StatusBarService {
@@ -68,13 +68,22 @@ export class StatusBarService {
         const parts: string[] = [];
         const snapshot = this.currentSnapshot;
         const widgets = this.config.widgets;
-        const remainPct = snapshot.total > 0 ? (snapshot.remaining / snapshot.total) * 100 : 0;
+
+        // 根据平台类型和进度条模式获取对应的使用数据
+        const { used, total, remaining } = this.getDisplayQuota(snapshot);
+        const remainPct = total > 0 ? (remaining / total) * 100 : 0;
         const usedPct = 100 - remainPct;
 
         // 状态图标
         if (widgets.statusIcon) {
             const icon = remainPct > 60 ? '🟢' : remainPct > 20 ? '🟡' : '🔴';
             parts.push(icon);
+        }
+
+        // 进度条展示（状态栏上的可视化进度条）
+        if (widgets.progressBar) {
+            const progressBar = this.buildStatusBarProgressBar(usedPct);
+            parts.push(progressBar);
         }
 
         // 状态比例
@@ -84,12 +93,12 @@ export class StatusBarService {
 
         // 已使用金额
         if (widgets.used) {
-            parts.push(`$${snapshot.used.toFixed(2)}`);
+            parts.push(`$${used.toFixed(2)}`);
         }
 
         // 总金额
         if (widgets.total) {
-            parts.push(`$${snapshot.total.toFixed(2)}`);
+            parts.push(`$${total.toFixed(2)}`);
         }
 
         // 测速延迟
@@ -103,10 +112,111 @@ export class StatusBarService {
         this.statusBarItem.text = parts.length > 0 ? parts.join(' ') : '$(credit-card) --';
     }
 
+    /**
+     * 构建状态栏进度条（精细版，使用 Unicode 块字符实现平滑过渡）
+     * 10 格 x 8 段 = 可精确到 1.25% 的进度显示
+     */
+    private buildStatusBarProgressBar(percentage: number): string {
+        const pct = Math.min(100, Math.max(0, percentage));
+        const totalBlocks = 10; // 总格数
+        const filledBlocks = (pct / 100) * totalBlocks;
+
+        // Unicode 块字符：从满到空的 8 段
+        const blocks = ['█', '▉', '▊', '▋', '▌', '▍', '▎', '▏', ' '];
+
+        let result = '';
+        for (let i = 0; i < totalBlocks; i++) {
+            const blockValue = filledBlocks - i;
+            if (blockValue >= 1) {
+                result += blocks[0]; // 完全填充 █
+            } else if (blockValue > 0) {
+                // 部分填充：根据小数部分选择对应的块字符
+                const partialIndex = Math.floor((1 - blockValue) * 8);
+                result += blocks[Math.min(partialIndex, 7)];
+            } else {
+                result += '░'; // 空格用灰色块表示
+            }
+        }
+        return result;
+    }
+
     private getMinLatency(): number | undefined {
         const successes = this.speedTestResults.filter(r => r.status === 'success');
         if (successes.length === 0) return undefined;
         return Math.min(...successes.map(r => r.latency));
+    }
+
+    /**
+     * 根据平台类型和进度条模式获取要显示的配额数据
+     */
+    private getDisplayQuota(snapshot: QuotaSnapshot): { used: number; total: number; remaining: number } {
+        const platformType = this.config.platformType;
+        const extended = snapshot.extended;
+
+        // PackyCode 平台：根据配置选择今日/本周/本月
+        if (platformType === 'packycode' && extended) {
+            const mode = this.config.packycodeProgressMode;
+            const period = this.getPackyCodePeriodByMode(extended, mode);
+            if (period) {
+                return {
+                    used: period.spent,
+                    total: period.budget,
+                    remaining: period.remaining
+                };
+            }
+        }
+
+        // Cubence 平台：根据配置选择5小时/本周/API Key
+        if (platformType === 'cubence' && extended) {
+            const mode = this.config.cubenceProgressMode;
+            const period = this.getCubencePeriodByMode(extended, mode);
+            if (period) {
+                return {
+                    used: period.spent,
+                    total: period.budget,
+                    remaining: period.remaining
+                };
+            }
+        }
+
+        // 默认返回快照中的基础数据（NewAPI/PackyAPI 等）
+        return {
+            used: snapshot.used,
+            total: snapshot.total,
+            remaining: snapshot.remaining
+        };
+    }
+
+    /**
+     * 根据 PackyCode 进度条模式获取对应的预算周期
+     */
+    private getPackyCodePeriodByMode(extended: ExtendedQuotaData, mode: PackyCodeProgressMode): BudgetPeriod | undefined {
+        switch (mode) {
+            case 'daily':
+                return extended.daily;
+            case 'weekly':
+                return extended.weekly;
+            case 'monthly':
+                return extended.monthly;
+            default:
+                return extended.daily;
+        }
+    }
+
+    /**
+     * 根据 Cubence 进度条模式获取对应的预算周期
+     */
+    private getCubencePeriodByMode(extended: ExtendedQuotaData, mode: CubenceProgressMode): BudgetPeriod | undefined {
+        switch (mode) {
+            case 'fiveHour':
+                return extended.fiveHour;
+            case 'weekly':
+                return extended.weekly;
+            case 'apiKey':
+                return extended.apiKeyQuota;
+            default:
+                return extended.fiveHour;
+        }
     }
 
     /**

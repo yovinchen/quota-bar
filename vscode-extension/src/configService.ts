@@ -5,14 +5,14 @@
  */
 
 import * as vscode from 'vscode';
-import { Config, PlatformCredentials, PlatformType, PlatformConfig, WidgetConfig } from './types';
+import { Config, PlatformCredentials, PlatformType, PlatformConfig, WidgetConfig, PackyCodeProgressMode, CubenceProgressMode } from './types';
 
 export class ConfigService {
     private static readonly CONFIG_SECTION = 'quota-bar';
     private static readonly SECRET_PREFIX = 'quota-bar.token.';
     private tokenCache: Partial<Record<PlatformType, string>> = {};
 
-    constructor(private readonly context: vscode.ExtensionContext) {}
+    constructor(private readonly context: vscode.ExtensionContext) { }
 
     /**
      * 获取完整配置
@@ -32,8 +32,12 @@ export class ConfigService {
                 used: config.get('widgets.used', false),
                 total: config.get('widgets.total', false),
                 latency: config.get('widgets.latency', true),
+                progressBar: config.get('widgets.progressBar', true),
             },
             platform: this.getPlatformConfig(platformType),
+            // 进度条显示模式配置
+            packycodeProgressMode: config.get('packycode.progressMode', 'daily') as PackyCodeProgressMode,
+            cubenceProgressMode: config.get('cubence.progressMode', 'fiveHour') as CubenceProgressMode,
         };
     }
 

@@ -23,6 +23,7 @@ class QuotaSettings : PersistentStateComponent<QuotaSettings.State> {
         var widgetUsed: Boolean = false,
         var widgetTotal: Boolean = false,
         var widgetLatency: Boolean = true,
+        var widgetProgressBar: Boolean = true,  // 进度条展示
 
         // NewAPI settings
         var newapiBaseUrl: String = "",
@@ -47,13 +48,17 @@ class QuotaSettings : PersistentStateComponent<QuotaSettings.State> {
             "https://codex-api.packycode.com",
             "https://codex-api-slb.packycode.com"
         ),
+        // PackyCode 进度条显示模式: daily, weekly, monthly
+        var packycodeProgressMode: String = "daily",
 
         // Cubence settings
         var cubenceBaseUrl: String = "https://cubence.com",
         var cubenceAccessToken: String = "",
         var cubenceSpeedTestUrls: MutableList<String> = mutableListOf(
             "https://cubence.com"
-        )
+        ),
+        // Cubence 进度条显示模式: fiveHour, weekly, apiKey
+        var cubenceProgressMode: String = "fiveHour"
     )
 
     private var myState = State()
